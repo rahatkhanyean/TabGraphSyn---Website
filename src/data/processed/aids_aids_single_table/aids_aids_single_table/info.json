@@ -1,0 +1,427 @@
+{
+    "name": "aids_aids_single_table",
+    "column_info": {
+        "0": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 45.0,
+            "min": 20.0
+        },
+        "1": {
+            "type": "numerical",
+            "subtype": "float",
+            "max": 86.68782806396484,
+            "min": 57.965606689453125
+        },
+        "2": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "3": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "4": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "5": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 100.0,
+            "min": 83.0
+        },
+        "6": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "7": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "8": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 1.0
+        },
+        "9": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1510.0,
+            "min": 0.0
+        },
+        "10": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "11": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "12": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "13": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 3.0,
+            "min": 1.0
+        },
+        "14": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "15": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "16": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "17": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 563.0,
+            "min": 195.0
+        },
+        "18": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 576.0,
+            "min": 94.0
+        },
+        "19": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 480.0,
+            "min": 10.0
+        },
+        "20": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "21": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 2157.0,
+            "min": 127.0
+        },
+        "22": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1222.0,
+            "min": 650.0
+        },
+        "23": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1.0,
+            "min": 0.0
+        },
+        "24": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1186.0,
+            "min": 33.0
+        },
+        "25": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 3.0,
+            "min": 0.0
+        },
+        "26": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 2138.0,
+            "min": 0.0
+        }
+    },
+    "num_col_idx": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26
+    ],
+    "cat_col_idx": [],
+    "column_names": [
+        "age",
+        "wtkg",
+        "hemo",
+        "homo",
+        "drugs",
+        "karnof",
+        "oprior",
+        "z30",
+        "zprior",
+        "preanti",
+        "race",
+        "gender",
+        "str2",
+        "strat",
+        "symptom",
+        "treat",
+        "offtrt",
+        "cd40",
+        "cd420",
+        "cd496",
+        "r",
+        "cd80",
+        "cd820",
+        "cens",
+        "days",
+        "arms",
+        "id"
+    ],
+    "train_num": 1925,
+    "test_num": 214,
+    "idx_mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5,
+        "6": 6,
+        "7": 7,
+        "8": 8,
+        "9": 9,
+        "10": 10,
+        "11": 11,
+        "12": 12,
+        "13": 13,
+        "14": 14,
+        "15": 15,
+        "16": 16,
+        "17": 17,
+        "18": 18,
+        "19": 19,
+        "20": 20,
+        "21": 21,
+        "22": 22,
+        "23": 23,
+        "24": 24,
+        "25": 25,
+        "26": 26
+    },
+    "inverse_idx_mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5,
+        "6": 6,
+        "7": 7,
+        "8": 8,
+        "9": 9,
+        "10": 10,
+        "11": 11,
+        "12": 12,
+        "13": 13,
+        "14": 14,
+        "15": 15,
+        "16": 16,
+        "17": 17,
+        "18": 18,
+        "19": 19,
+        "20": 20,
+        "21": 21,
+        "22": 22,
+        "23": 23,
+        "24": 24,
+        "25": 25,
+        "26": 26
+    },
+    "idx_name_mapping": {
+        "0": "age",
+        "1": "wtkg",
+        "2": "hemo",
+        "3": "homo",
+        "4": "drugs",
+        "5": "karnof",
+        "6": "oprior",
+        "7": "z30",
+        "8": "zprior",
+        "9": "preanti",
+        "10": "race",
+        "11": "gender",
+        "12": "str2",
+        "13": "strat",
+        "14": "symptom",
+        "15": "treat",
+        "16": "offtrt",
+        "17": "cd40",
+        "18": "cd420",
+        "19": "cd496",
+        "20": "r",
+        "21": "cd80",
+        "22": "cd820",
+        "23": "cens",
+        "24": "days",
+        "25": "arms",
+        "26": "id"
+    },
+    "metadata": {
+        "columns": {
+            "0": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "1": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "2": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "3": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "4": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "5": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "6": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "7": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "8": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "9": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "10": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "11": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "12": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "13": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "14": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "15": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "16": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "17": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "18": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "19": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "20": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "21": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "22": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "23": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "24": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "25": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "26": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            }
+        }
+    }
+}

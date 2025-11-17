@@ -1,0 +1,46 @@
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    container_name: tabgraphsyn_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=tabgraphsyn
+    networks:
+      - tabgraphsyn_network
+
+  # Django web application
+  web:
+    build: .
+    container_name: tabgraphsyn_web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    environment:
+      - DJANGO_SETTINGS_MODULE=tabgraphsyn_site.settings
+      - TABGRAPHSYN_MONGO_URI=mongodb://mongodb:27017
+      - TABGRAPHSYN_MONGO_DB=tabgraphsyn
+      - TABGRAPHSYN_MONGO_USERS_COLLECTION=users
+      - TABGRAPHSYN_MONGO_RUNS_COLLECTION=runs
+    depends_on:
+      - mongodb
+    networks:
+      - tabgraphsyn_network
+    command: python manage.py runserver 0.0.0.0:8000
+
+volumes:
+  mongodb_data:
+  static_volume:
+  media_volume:
+
+networks:
+  tabgraphsyn_network:
+    driver: bridge

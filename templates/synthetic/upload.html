@@ -1,0 +1,1118 @@
+﻿{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Run TabGraphSyn Pipeline{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/upload.css' %}" />
+{% endblock %}
+
+{% block content %}
+    {% if form.non_field_errors %}
+        <div class="error-banner">
+            {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="page-header">
+        <div>
+            <h1>Orchestrate a new simulation</h1>
+            <p class="page-subtitle">Align data inputs, metadata, and training knobs in a single guided flow before you launch TabGraphSyn.</p>
+        </div>
+        <span class="page-chip">Interactive run</span>
+    </div>
+
+    <div class="journey-layout">
+        <form method="post" enctype="multipart/form-data" class="journey-form">
+            {% csrf_token %}
+            {{ form.staging_token }}
+            <div class="journey-flow">
+                <section class="journey-step" data-step="01">
+                    <div class="journey-step-header">
+                        <span class="journey-step-index">01</span>
+                        <div>
+                            <h2 class="journey-step-title">Select your data source</h2>
+                            <p class="journey-step-copy">Start with packaged datasets or upload a CSV to craft a custom run.</p>
+                        </div>
+                    </div>
+                    <div class="journey-step-body">
+                        <section class="card-section">
+                            <div class="radio-stack" id="data-source-options">
+                                {% for radio in form.data_source %}
+                                    <label class="radio-option">
+                                        {{ radio.tag }} {{ radio.choice_label }}
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </section>
+                        <section id="preloaded-options" class="card-section" hidden>
+                            <div class="field-row">
+                                <div>
+                                    <label class="field-label" for="{{ form.dataset.id_for_label }}">Dataset</label>
+                                    {{ form.dataset }}
+                                    {% if form.dataset.errors %}<ul class="errorlist">{% for error in form.dataset.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                                <div>
+                                    <label class="field-label" for="{{ form.metadata_template.id_for_label }}">Metadata template</label>
+                                    {{ form.metadata_template }}
+                                    {% if form.metadata_template.errors %}<ul class="errorlist">{% for error in form.metadata_template.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                            </div>
+                            <p class="inline-hint">Templates automatically align column semantics to the target table.</p>
+                        </section>
+                        <section id="upload-options" class="card-section" hidden>
+                            <div class="field-row">
+                                <div>
+                                    <label class="field-label" for="dataset-file">CSV file</label>
+                                    <input type="file" id="dataset-file" class="input-control" accept=".csv,text/csv" />
+                                    <p class="field-help">Upload a CSV to profile columns, detect types, and summarise rows.</p>
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div>
+                                    <label class="field-label" for="{{ form.uploaded_dataset_name.id_for_label }}">Dataset name</label>
+                                    {{ form.uploaded_dataset_name }}
+                                </div>
+                                <div>
+                                    <label class="field-label" for="{{ form.uploaded_table_name.id_for_label }}">Table name</label>
+                                    {{ form.uploaded_table_name }}
+                                </div>
+                            </div>
+                            {% if form.uploaded_dataset_name.errors or form.uploaded_table_name.errors %}
+                                <div class="field-row">
+                                    <div>{% if form.uploaded_dataset_name.errors %}<ul class="errorlist">{% for error in form.uploaded_dataset_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}</div>
+                                    <div>{% if form.uploaded_table_name.errors %}<ul class="errorlist">{% for error in form.uploaded_table_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}</div>
+                                </div>
+                            {% endif %}
+                            <div class="field-row">
+                                <div id="upload-summary" class="field-help" hidden></div>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+
+                <section class="journey-step" id="metadata-step" data-step="02" hidden>
+                    <div class="journey-step-header">
+                        <span class="journey-step-index">02</span>
+                        <div>
+                            <h2 class="journey-step-title">Define metadata strategy</h2>
+                            <p class="journey-step-copy">Switch between packaged templates or customise inferred column semantics.</p>
+                        </div>
+                    </div>
+                    <div class="journey-step-body">
+                        <div id="metadata-choice" class="metadata-choice" hidden>
+                            <div class="metadata-choice-header">Metadata strategy</div>
+                            <div class="radio-stack" id="metadata-mode-options">
+                                {% for radio in form.metadata_mode %}
+                                    <label class="radio-option">
+                                        {{ radio.tag }} {{ radio.choice_label }}
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            {% if form.metadata_mode.errors %}<ul class="errorlist">{% for error in form.metadata_mode.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                            <div id="metadata-template-panel" class="metadata-panel" hidden>
+                                <label class="field-label" for="template-select">Available templates</label>
+                                <select id="template-select" class="input-control"></select>
+                                <p class="field-help">Choose a packaged schema that matches your upload.</p>
+                            </div>
+                            <div id="metadata-custom-panel" class="metadata-panel" hidden>
+                                <p class="field-help">Review inferred columns, adjust types, and nominate a primary key before finalising.</p>
+                                <div class="table-wrapper">
+                                    <table id="column-summary" class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Column</th>
+                                                <th>Detected</th>
+                                                <th>Missing?</th>
+                                                <th>Kind</th>
+                                                <th>Representation</th>
+                                                <th>Primary key</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="secondary-button" id="finalize-metadata-button" disabled hidden>Finalize custom metadata</button>
+                                <p class="field-help" id="finalize-status"></p>
+                                <p class="field-help" id="metadata-reminder" hidden>Finalize custom metadata before running the pipeline.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="journey-step" data-step="03">
+                    <div class="journey-step-header">
+                        <span class="journey-step-index">03</span>
+                        <div>
+                            <h2 class="journey-step-title">Tune & launch</h2>
+                            <p class="journey-step-copy">Adjust training epochs, inspect the generated command, and start the pipeline.</p>
+                        </div>
+                    </div>
+                    <div class="journey-step-body">
+                        <section class="card-section" id="training-section">
+                            <h3 class="section-title">Training parameters</h3>
+                            <div class="field-row">
+                                <div>
+                                    <label class="field-label" for="{{ form.epochs_vae.id_for_label }}">VAE epochs</label>
+                                    {{ form.epochs_vae }}
+                                    {% if form.epochs_vae.errors %}<ul class="errorlist">{% for error in form.epochs_vae.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                                <div>
+                                    <label class="field-label" for="{{ form.epochs_gnn.id_for_label }}">GNN epochs</label>
+                                    {{ form.epochs_gnn }}
+                                    {% if form.epochs_gnn.errors %}<ul class="errorlist">{% for error in form.epochs_gnn.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                                <div>
+                                    <label class="field-label" for="{{ form.epochs_diff.id_for_label }}">Diffusion epochs</label>
+                                    {{ form.epochs_diff }}
+                                    {% if form.epochs_diff.errors %}<ul class="errorlist">{% for error in form.epochs_diff.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="card-section">
+                            <h3 class="section-title">Epoch-wise Evaluation</h3>
+                            <p class="inline-hint">Track marginal distribution and pairwise correlation errors during training</p>
+
+                            <div class="field-group">
+                                <div>
+                                    <label class="field-label checkbox-label">
+                                        {{ form.enable_epoch_eval }}
+                                        <span>{{ form.enable_epoch_eval.label }}</span>
+                                    </label>
+                                    {% if form.enable_epoch_eval.help_text %}
+                                    <p class="field-help">{{ form.enable_epoch_eval.help_text }}</p>
+                                    {% endif %}
+                                    {% if form.enable_epoch_eval.errors %}<ul class="errorlist">{% for error in form.enable_epoch_eval.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                            </div>
+
+                            <div class="field-group epoch-eval-options" style="margin-top: 16px;">
+                                <div>
+                                    <label class="field-label" for="{{ form.eval_frequency.id_for_label }}">{{ form.eval_frequency.label }}</label>
+                                    {{ form.eval_frequency }}
+                                    {% if form.eval_frequency.help_text %}
+                                    <p class="field-help">{{ form.eval_frequency.help_text }}</p>
+                                    {% endif %}
+                                    {% if form.eval_frequency.errors %}<ul class="errorlist">{% for error in form.eval_frequency.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                                <div>
+                                    <label class="field-label" for="{{ form.eval_samples.id_for_label }}">{{ form.eval_samples.label }}</label>
+                                    {{ form.eval_samples }}
+                                    {% if form.eval_samples.help_text %}
+                                    <p class="field-help">{{ form.eval_samples.help_text }}</p>
+                                    {% endif %}
+                                    {% if form.eval_samples.errors %}<ul class="errorlist">{% for error in form.eval_samples.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="card-section" id="command-preview-section">
+                            <h3 class="section-title">Command preview</h3>
+                            <p class="inline-hint">The orchestrator will execute:</p>
+                            <code id="command-preview">{{ command_preview }}</code>
+                        </section>
+                        <div class="journey-actions">
+                            <button type="submit" class="primary-button" id="run-button" disabled>Run pipeline</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </form>
+
+        <aside class="journey-sidebar">
+            <div class="status-card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Live run monitor</div>
+                        <div class="card-subtitle">Stay on this tab to watch staging, training, and evaluation updates in real time.</div>
+                    </div>
+                </div>
+                <p class="status-hint" id="status-placeholder">No active job yet. Configure the run and hit the button to begin.</p>
+                <section class="card" run-status-card id="run-status-panel" hidden aria-live="polite">
+                    <div class="card-header">
+                        <div class="card-title">Run status</div>
+                        <div class="card-subtitle" id="run-status-stage">Queued</div>
+                    </div>
+                    <p id="run-status-message" class="status-message"></p>
+                    <pre id="run-status-logs" class="status-logs"></pre>
+                    <div class="action-row" id="run-status-actions" hidden>
+                        <a href="#" id="run-status-open-result" class="primary-button">View results</a>
+                    </div>
+                </section>
+            </div>
+            <div class="tips-card">
+                <h3>Quick tips</h3>
+                <ul>
+                    <li>Uploading a CSV automatically profiles column kinds and suggested representations.</li>
+                    <li>Finalize custom metadata to unlock advanced configuration for the uploaded dataset.</li>
+                    <li>Keep the page open once running so the monitor can poll and redirect on completion.</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+    {{ table_map|json_script:"dataset-table-map" }}
+    {{ defaults|json_script:"pipeline-defaults" }}
+    {{ api_urls|json_script:"synthetic-api-urls" }}
+    <script src="{% static 'js/upload.js' %}"></script>
+    <script type="application/javascript">
+    /* Inline script block has been moved to static/js/upload.js */
+    </script>
+    <!--<script>
+    (function () {
+        const getCookie = (name) => {
+            const value = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+            return value ? decodeURIComponent(value[1]) : null;
+        };
+
+        const datasetSelect = document.getElementById('id_dataset');
+        const metadataTemplateField = document.getElementById('id_metadata_template');
+        const dataSourceRadios = document.querySelectorAll('input[name="data_source"]');
+        const metadataModeRadios = document.querySelectorAll('input[name="metadata_mode"]');
+        const stagingTokenInput = document.getElementById('id_staging_token');
+        const fileInput = document.getElementById('dataset-file');
+        const datasetNameInput = document.getElementById('id_uploaded_dataset_name');
+        const tableNameInput = document.getElementById('id_uploaded_table_name');
+        const uploadSummary = document.getElementById('upload-summary');
+        const metadataChoice = document.getElementById('metadata-choice');
+        const metadataStep = document.getElementById('metadata-step');
+        const metadataTemplatePanel = document.getElementById('metadata-template-panel');
+        const metadataCustomPanel = document.getElementById('metadata-custom-panel');
+        const templateSelect = document.getElementById('template-select');
+        const finalizeButton = document.getElementById('finalize-metadata-button');
+        const finalizeStatus = document.getElementById('finalize-status');
+        const metadataReminder = document.getElementById('metadata-reminder');
+        const columnTableBody = document.querySelector('#column-summary tbody');
+        const runButton = document.getElementById('run-button');
+        const formElement = document.querySelector('form');
+        const statusPanel = document.getElementById('run-status-panel');
+        const statusStageEl = document.getElementById('run-status-stage');
+        const statusMessageEl = document.getElementById('run-status-message');
+        const statusLogsEl = document.getElementById('run-status-logs');
+        const statusActions = document.getElementById('run-status-actions');
+        const statusResultLink = document.getElementById('run-status-open-result');
+        const statusPlaceholder = document.getElementById('status-placeholder');
+        const commandPreview = document.getElementById('command-preview');
+        const preloadedSection = document.getElementById('preloaded-options');
+        const uploadSection = document.getElementById('upload-options');
+        const trainingSection = document.getElementById('training-section');
+        const commandSection = document.getElementById('command-preview-section');
+
+        function toggleStatusPlaceholder() {
+            if (!statusPanel || !statusPlaceholder) {
+                return;
+            }
+            statusPlaceholder.hidden = !statusPanel.hidden;
+        }
+
+        function toArray(collection) {
+            if (!collection) {
+                return [];
+            }
+            if (Array.isArray(collection)) {
+                return collection;
+            }
+            try {
+                return Array.prototype.slice.call(collection);
+            } catch (error) {
+                var result = [];
+                var length = collection && collection.length ? collection.length : 0;
+                for (var index = 0; index < length; index += 1) {
+                    result.push(collection[index]);
+                }
+                return result;
+            }
+        }
+
+        function firstChecked(collection) {
+            var items = toArray(collection);
+            for (var index = 0; index < items.length; index += 1) {
+                var item = items[index];
+                if (item && item.checked) {
+                    return item;
+                }
+            }
+            return null;
+        }
+
+        function getSelectedDataSource() {
+            var checked = firstChecked(dataSourceRadios);
+            return checked ? checked.value : 'preloaded';
+        }
+
+        function getSelectedMetadataMode() {
+            var checked = firstChecked(metadataModeRadios);
+            return checked ? checked.value : null;
+        }
+
+        const tableMap = JSON.parse(document.getElementById('dataset-table-map').textContent);
+        const defaults = JSON.parse(document.getElementById('pipeline-defaults').textContent);
+        const apiUrls = JSON.parse(document.getElementById('synthetic-api-urls').textContent);
+        const runButtonDefaultLabel = runButton ? (runButton.textContent.trim() || 'Run pipeline') : 'Run pipeline';
+
+        const COLUMN_KINDS = ['categorical', 'numerical', 'datetime', 'boolean', 'id'];
+        const REPRESENTATION_OPTIONS = ['Int64', 'Float'];
+
+        let stagedUpload = null;
+        let metadataReady = false;
+        let customMetadataDirty = false;
+        let currentTable = null;
+        let activeJobToken = null;
+        let jobStatusTimer = null;
+        let jobIsRunning = false;
+        let pendingResultUrl = null;
+
+        const csrfToken = getCookie('csrftoken');
+
+        const toggleVisibility = (element, shouldShow) => {
+            if (!element) {
+                return;
+            }
+            element.hidden = !shouldShow;
+            if (shouldShow) {
+                element.style.removeProperty('display');
+            } else {
+                element.style.display = 'none';
+            }
+            if (element === metadataChoice && metadataStep) {
+                metadataStep.hidden = !shouldShow;
+            }
+        };
+
+        const statusUrlFor = (token) => apiUrls.status.replace('JOB_TOKEN', token);
+        const resultUrlFor = (token) => apiUrls.result.replace('RUN_TOKEN', token);
+
+        const resetStatusPanel = () => {
+            if (!statusPanel) {
+                return;
+            }
+            pendingResultUrl = null;
+            statusPanel.hidden = true;
+            statusPanel.classList.remove('is-error');
+            toggleStatusPlaceholder();
+            if (statusStageEl) {
+                statusStageEl.textContent = 'Queued';
+            }
+            if (statusMessageEl) {
+                statusMessageEl.textContent = '';
+            }
+            if (statusLogsEl) {
+                statusLogsEl.textContent = '';
+            }
+            if (statusActions) {
+                statusActions.hidden = true;
+            }
+            if (statusResultLink) {
+                statusResultLink.removeAttribute('href');
+                statusResultLink.textContent = 'View results';
+            }
+        };
+
+        const stopStatusPoll = () => {
+            if (jobStatusTimer) {
+                window.clearTimeout(jobStatusTimer);
+                jobStatusTimer = null;
+            }
+        };
+
+        const scheduleStatusPoll = (delay = 1000) => {
+            stopStatusPoll();
+            jobStatusTimer = window.setTimeout(fetchJobStatus, delay);
+        };
+
+        const updateStatusPanel = (data) => {
+            if (!statusPanel) {
+                return;
+            }
+            statusPanel.hidden = false;
+            toggleStatusPlaceholder();
+            statusPanel.classList.remove('is-error');
+            if (statusActions) {
+                statusActions.hidden = true;
+            }
+            if (statusResultLink) {
+                statusResultLink.removeAttribute('href');
+            }
+            if (statusStageEl) {
+                statusStageEl.textContent = (data && data.stage) ? data.stage.replace(/_/g, ' ').replace(/^(.)/, (match) => match.toUpperCase()) : 'Running';
+            }
+            if (statusMessageEl) {
+                statusMessageEl.textContent = (data && data.message) ? data.message : 'Processing...';
+            }
+            if (statusLogsEl && data && data.log) {
+                statusLogsEl.textContent = data.log;
+            }
+        };
+
+        const handleJobCompletion = (resultToken) => {
+            stopStatusPoll();
+            jobIsRunning = false;
+            updateRunButton();
+            activeJobToken = null;
+            if (statusPanel) {
+                statusPanel.hidden = false;
+                statusPanel.classList.remove('is-error');
+            }
+            toggleStatusPlaceholder();
+            const url = resultUrlFor(resultToken);
+            pendingResultUrl = url;
+            if (statusStageEl) {
+                statusStageEl.textContent = 'Completed';
+            }
+            if (statusMessageEl) {
+                statusMessageEl.textContent = 'Completed';
+            }
+            if (statusActions) {
+                statusActions.hidden = false;
+            }
+            if (statusResultLink) {
+                statusResultLink.href = url;
+                statusResultLink.textContent = 'View results';
+            }
+            window.setTimeout(() => {
+                if (pendingResultUrl) {
+                    window.location.href = pendingResultUrl;
+                }
+            }, 1500);
+        };
+
+        const handleJobFailure = (message) => {
+            stopStatusPoll();
+            jobIsRunning = false;
+            updateRunButton();
+            activeJobToken = null;
+            pendingResultUrl = null;
+            if (statusPanel) {
+                statusPanel.hidden = false;
+                statusPanel.classList.add('is-error');
+            }
+            toggleStatusPlaceholder();
+            if (statusStageEl) {
+                statusStageEl.textContent = 'Failed';
+            }
+            if (statusMessageEl) {
+                statusMessageEl.textContent = message || 'Pipeline run failed.';
+            }
+            if (statusActions) {
+                statusActions.hidden = true;
+            }
+            if (statusResultLink) {
+                statusResultLink.removeAttribute('href');
+            }
+        };
+
+        const fetchJobStatus = () => {
+            if (!activeJobToken) {
+                return;
+            }
+            fetch(statusUrlFor(activeJobToken), { headers: { 'Cache-Control': 'no-store' } })
+                .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+                .then(({ ok, payload }) => {
+                    if (!ok) {
+                        throw payload;
+                    }
+                    updateStatusPanel(payload);
+                    if (payload.stage === 'completed' && payload.resultToken) {
+                        handleJobCompletion(payload.resultToken);
+                    } else if (payload.stage === 'failed') {
+                        handleJobFailure(payload.error || 'Pipeline run failed.');
+                    } else {
+                        scheduleStatusPoll(1000);
+                    }
+                })
+                .catch((error) => {
+                    console.error('Status polling error', error);
+                    if (activeJobToken) {
+                        scheduleStatusPoll(2000);
+                    }
+                });
+        };
+
+        const startPipelineRun = () => {
+            if (jobIsRunning) {
+                return;
+            }
+            if (!formElement) {
+                return;
+            }
+            const dataSource = getSelectedDataSource();
+            if (dataSource === 'uploaded' && (!stagedUpload || !metadataReady)) {
+                return;
+            }
+            jobIsRunning = true;
+            activeJobToken = null;
+            pendingResultUrl = null;
+            stopStatusPoll();
+            resetStatusPanel();
+            if (statusPanel) {
+                statusPanel.hidden = false;
+            }
+            toggleStatusPlaceholder();
+            if (statusMessageEl) {
+                statusMessageEl.textContent = 'Submitting job...';
+            }
+            if (statusStageEl) {
+                statusStageEl.textContent = 'Queued';
+            }
+            if (statusLogsEl) {
+                statusLogsEl.textContent = '';
+            }
+            updateRunButton();
+            const formData = new FormData(formElement);
+            fetch(apiUrls.start, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken || '',
+                },
+                body: formData,
+            })
+                .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+                .then(({ ok, payload }) => {
+                    if (!ok) {
+                        throw payload;
+                    }
+                    activeJobToken = payload.jobToken;
+                    updateStatusPanel(payload);
+                    scheduleStatusPoll(500);
+                })
+                .catch((error) => {
+                    console.error('Failed to start pipeline', error);
+                    const messages = [];
+                    if (error && error.errors) {
+                        Object.keys(error.errors).forEach((key) => {
+                            error.errors[key].forEach((msg) => messages.push(msg));
+                        });
+                    }
+                    const fallback = (error && (error.error || error.message)) || 'Failed to start pipeline.';
+                    handleJobFailure(messages.length ? messages.join() : fallback);
+                });
+        };
+
+        const showAdvanced = () => {};
+        const hideAdvanced = () => {};
+
+        const showUploadSummary = (text, isError) => {
+            if (!uploadSummary) {
+                return;
+            }
+            uploadSummary.textContent = text;
+            uploadSummary.hidden = false;
+            uploadSummary.style.color = isError ? '#c53' : '';
+        };
+
+        const clearUploadState = () => {
+            stagedUpload = null;
+            metadataReady = false;
+            customMetadataDirty = false;
+            stagingTokenInput.value = '';
+            if (uploadSummary) {
+                uploadSummary.hidden = true;
+                uploadSummary.textContent = '';
+            }
+            toggleVisibility(metadataChoice, false);
+            finalizeButton.disabled = true;
+            finalizeButton.hidden = true;
+            finalizeStatus.textContent = '';
+            finalizeStatus.dataset.state = '';
+            columnTableBody.innerHTML = '';
+            datasetNameInput.value = '';
+            tableNameInput.value = '';
+            currentTable = null;
+            hideAdvanced();
+            if (metadataReminder) metadataReminder.hidden = true;
+            runButton.disabled = true;
+            updatePreview();
+            if (!jobIsRunning) {
+                resetStatusPanel();
+            }
+            updateRunButton();
+        };
+
+        const renderColumnRows = (columns) => {
+            columnTableBody.innerHTML = '';
+            columns.forEach((column) => {
+                const row = document.createElement('tr');
+                row.dataset.columnName = column.name;
+                const nameCell = document.createElement('td');
+                nameCell.textContent = column.name;
+                row.appendChild(nameCell);
+                const inferredCell = document.createElement('td');
+                inferredCell.textContent = column.inferred_type;
+                row.appendChild(inferredCell);
+                const missingCell = document.createElement('td');
+                missingCell.textContent = column.allow_missing ? 'Yes' : 'No';
+                row.appendChild(missingCell);
+                const kindCell = document.createElement('td');
+                const kindSelect = document.createElement('select');
+                kindSelect.className = 'input-control compact';
+                kindSelect.dataset.columnName = column.name;
+                kindSelect.dataset.role = 'kind';
+                COLUMN_KINDS.forEach((kind) => {
+                    const option = document.createElement('option');
+                    option.value = kind;
+                    option.textContent = kind;
+                    if (kind === column.inferred_type) {
+                        option.selected = true;
+                    }
+                    kindSelect.appendChild(option);
+                });
+                kindCell.appendChild(kindSelect);
+                row.appendChild(kindCell);
+                const representationCell = document.createElement('td');
+                const representationPlaceholder = document.createElement('span');
+                representationPlaceholder.className = 'text-muted';
+                representationPlaceholder.textContent = '-';
+                const representationSelect = document.createElement('select');
+                representationSelect.className = 'input-control compact';
+                representationSelect.dataset.columnName = column.name;
+                representationSelect.dataset.role = 'representation';
+                REPRESENTATION_OPTIONS.forEach((optionValue) => {
+                    const option = document.createElement('option');
+                    option.value = optionValue;
+                    option.textContent = optionValue;
+                    representationSelect.appendChild(option);
+                });
+                representationSelect.value = column.representation || 'Float';
+                representationCell.appendChild(representationPlaceholder);
+                representationCell.appendChild(representationSelect);
+                row.appendChild(representationCell);
+                const syncRepresentationControls = () => {
+                    const isNumeric = kindSelect.value === 'numerical';
+                    representationSelect.hidden = !isNumeric;
+                    representationSelect.disabled = !isNumeric;
+                    representationPlaceholder.hidden = isNumeric;
+                };
+                syncRepresentationControls();
+                kindSelect.addEventListener('change', () => {
+                    customMetadataDirty = true;
+                    finalizeButton.disabled = false;
+                    finalizeButton.hidden = false;
+                    finalizeStatus.dataset.state = '';
+                    metadataReady = false;
+                    syncRepresentationControls();
+                    if (metadataReminder) metadataReminder.hidden = false;
+                    updateRunButton();
+                });
+                representationSelect.addEventListener('change', () => {
+                    customMetadataDirty = true;
+                    finalizeButton.disabled = false;
+                    finalizeButton.hidden = false;
+                    finalizeStatus.dataset.state = '';
+                    metadataReady = false;
+                    if (metadataReminder) metadataReminder.hidden = false;
+                    updateRunButton();
+                });
+                const pkCell = document.createElement('td');
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'primary-key';
+                radio.value = column.name;
+                radio.addEventListener('change', () => {
+                    customMetadataDirty = true;
+                    finalizeButton.disabled = false;
+                    finalizeButton.hidden = false;
+                    finalizeStatus.dataset.state = '';
+                    metadataReady = false;
+                    updateRunButton();
+                });
+                pkCell.appendChild(radio);
+                row.appendChild(pkCell);
+                columnTableBody.appendChild(row);
+            });
+        };
+
+        const collectCustomMetadata = () => {
+            const rows = toArray(columnTableBody.querySelectorAll('tr'));
+            const columns = rows.map((row) => {
+                const name = row.dataset.columnName;
+                const kindSelect = row.querySelector('select[data-role="kind"]');
+                const representationSelect = row.querySelector('select[data-role="representation"]');
+                const kind = kindSelect ? kindSelect.value : 'categorical';
+                const representation = representationSelect && !representationSelect.disabled ? representationSelect.value : null;
+                return {
+                    name,
+                    kind,
+                    representation,
+                };
+            });
+            const primaryRadio = columnTableBody.querySelector('input[name="primary-key"]:checked');
+            return {
+                columns,
+                primaryKey: primaryRadio ? primaryRadio.value : null,
+            };
+        };
+
+        const setMetadataMode = (value) => {
+            if (value === 'template') {
+                toggleVisibility(metadataTemplatePanel, true);
+                toggleVisibility(metadataCustomPanel, false);
+            } else if (value === 'custom') {
+                toggleVisibility(metadataTemplatePanel, false);
+                toggleVisibility(metadataCustomPanel, true);
+            } else {
+                toggleVisibility(metadataTemplatePanel, false);
+                toggleVisibility(metadataCustomPanel, false);
+            }
+            updateMetadataState();
+        };
+
+        const updateMetadataState = () => {
+            if (!stagedUpload) {
+                toggleVisibility(metadataChoice, false);
+                metadataReady = false;
+                hideAdvanced();
+                if (metadataReminder) metadataReminder.hidden = true;
+                updateRunButton();
+                return;
+            }
+            toggleVisibility(metadataChoice, true);
+            const selectedMode = getSelectedMetadataMode();
+            if (selectedMode === 'template') {
+                metadataReady = Boolean(templateSelect.value);
+                finalizeButton.hidden = true;
+                finalizeButton.disabled = true;
+                finalizeStatus.textContent = metadataReady ? 'Using selected template metadata.' : '';
+                finalizeStatus.dataset.state = metadataReady ? 'saved' : '';
+                if (metadataReminder) metadataReminder.hidden = metadataReady;
+                if (metadataReady) {
+                    showAdvanced();
+                } else {
+                    hideAdvanced();
+                }
+            } else if (selectedMode === 'custom') {
+                metadataReady = !customMetadataDirty && finalizeStatus.dataset.state === 'saved';
+                finalizeButton.hidden = false;
+                finalizeButton.disabled = metadataReady;
+                if (metadataReminder) metadataReminder.hidden = metadataReady;
+                if (metadataReady) {
+                    showAdvanced();
+                } else {
+                    hideAdvanced();
+                }
+            } else {
+                metadataReady = false;
+                hideAdvanced();
+            }
+            updateRunButton();
+        };
+
+        const updatePreview = () => {
+            const selectedDataset = datasetSelect ? datasetSelect.value || defaults.dataset : defaults.dataset;
+            const dataSource = getSelectedDataSource();
+            const epochsV = document.getElementById('id_epochs_vae').value || defaults.epochs_vae;
+            const epochsG = document.getElementById('id_epochs_gnn').value || defaults.epochs_gnn;
+            const epochsD = document.getElementById('id_epochs_diff').value || defaults.epochs_diff;
+            let dataset = selectedDataset;
+            let table = tableMap[selectedDataset] || selectedDataset;
+            if (dataSource === 'uploaded' && stagedUpload) {
+                dataset = stagedUpload.datasetName;
+                if (datasetNameInput.value) {
+                    dataset = datasetNameInput.value.replace(/[^A-Za-z0-9_\-]/g, '_').toLowerCase() || dataset;
+                }
+                const selectedMode = getSelectedMetadataMode();
+                if (selectedMode === 'template' && templateSelect.value) {
+                    table = tableMap[templateSelect.value] || stagedUpload.tableName;
+                } else if (currentTable) {
+                    table = currentTable;
+                } else if (tableNameInput.value) {
+                    table = tableNameInput.value;
+                } else {
+                    table = stagedUpload.tableName;
+                }
+            }
+            const previewCommand = [
+                'python src/scripts/run_pipeline.py',
+                `--dataset-name ${dataset}`,
+                `--target-table ${table}`,
+                `--epochs-gnn ${epochsG}`,
+                `--epochs-vae ${epochsV}`,
+                `--epochs-diff ${epochsD}`,
+            ].join(' ');
+            commandPreview.textContent = previewCommand;
+        };
+
+        const updateRunButton = () => {
+            if (!runButton) {
+                return;
+            }
+            if (jobIsRunning) {
+                runButton.disabled = true;
+                runButton.textContent = 'Running...';
+                return;
+            }
+            runButton.textContent = runButtonDefaultLabel;
+            const dataSource = getSelectedDataSource();
+            if (dataSource === 'uploaded') {
+                const ready = Boolean(stagedUpload) && metadataReady;
+                runButton.disabled = !ready;
+                if (metadataReminder) metadataReminder.hidden = ready;
+            } else {
+                runButton.disabled = false;
+                if (metadataReminder) metadataReminder.hidden = true;
+            }
+        };
+
+        const setDataSource = (value) => {
+            if (!jobIsRunning) {
+                resetStatusPanel();
+            }
+            if (value === 'preloaded') {
+                toggleVisibility(preloadedSection, true);
+                toggleVisibility(uploadSection, false);
+                toggleVisibility(metadataChoice, false);
+                metadataReady = true;
+                if (metadataReminder) metadataReminder.hidden = true;
+                showAdvanced();
+            } else {
+                toggleVisibility(preloadedSection, false);
+                toggleVisibility(uploadSection, true);
+                toggleVisibility(metadataChoice, Boolean(stagedUpload));
+                if (!stagedUpload) {
+                    metadataReady = false;
+                    hideAdvanced();
+                }
+            }
+            updatePreview();
+            updateRunButton();
+        };
+
+        const handleFileUpload = async () => {
+            if (!fileInput.files || !fileInput.files.length) {
+                return;
+            }
+            const file = fileInput.files[0];
+            if (!jobIsRunning) {
+                resetStatusPanel();
+            }
+            const formData = new FormData();
+            formData.append('dataset', file);
+            if (datasetNameInput.value) {
+                formData.append('datasetName', datasetNameInput.value);
+            }
+            if (tableNameInput.value) {
+                formData.append('tableName', tableNameInput.value);
+            }
+            showUploadSummary('Uploading and profiling data...', false);
+            runButton.disabled = true;
+            metadataReady = false;
+            customMetadataDirty = false;
+            finalizeStatus.textContent = '';
+            finalizeStatus.dataset.state = '';
+            try {
+                const response = await fetch(apiUrls.stage, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken || '',
+                    },
+                    body: formData,
+                });
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+                const payload = await response.json();
+                stagedUpload = {
+                    token: payload.token,
+                    datasetName: payload.datasetName,
+                    tableName: payload.tableName,
+                    columns: payload.columns || [],
+                };
+                stagingTokenInput.value = stagedUpload.token;
+                showUploadSummary(`${payload.rowCount || 'Rows'} • ${payload.columns.length} columns`, false);
+                renderColumnRows(stagedUpload.columns);
+                metadataReady = false;
+                customMetadataDirty = false;
+                finalizeStatus.dataset.state = '';
+                finalizeStatus.textContent = '';
+                templateSelect.innerHTML = '';
+                if (payload.templates && payload.templates.length) {
+                    payload.templates.forEach((template) => {
+                        const option = document.createElement('option');
+                        option.value = template.value;
+                        option.textContent = template.label;
+                        templateSelect.appendChild(option);
+                    });
+                    templateSelect.value = '';
+                }
+                toggleVisibility(metadataChoice, true);
+                setMetadataMode('template');
+                updatePreview();
+            } catch (error) {
+                console.error('Upload failed', error);
+                clearUploadState();
+                showUploadSummary('Upload failed. Please verify the file and try again.', true);
+            }
+        };
+
+        const finalizeCustomMetadata = () => {
+            const { columns, primaryKey } = collectCustomMetadata();
+            if (!columns.length) {
+                return;
+            }
+            finalizeButton.disabled = true;
+            finalizeStatus.textContent = 'Saving metadata...';
+            finalizeStatus.dataset.state = '';
+            fetch(apiUrls.finalize, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken || '',
+                },
+                body: JSON.stringify({
+                    token: stagedUpload ? stagedUpload.token : null,
+                    columns,
+                    primaryKey,
+                }),
+            })
+                .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+                .then(({ ok, payload }) => {
+                    if (!ok) {
+                        throw payload;
+                    }
+                    finalizeStatus.textContent = 'Metadata saved.';
+                    finalizeStatus.dataset.state = 'saved';
+                    customMetadataDirty = false;
+                    metadataReady = true;
+                    updateRunButton();
+                })
+                .catch((error) => {
+                    console.error('Failed to save metadata', error);
+                    finalizeStatus.textContent = 'Failed to save metadata';
+                    finalizeStatus.dataset.state = '';
+                    finalizeButton.disabled = false;
+                });
+        };
+
+        const ensureTemplateOptions = () => {
+            if (metadataTemplateField && templateSelect) {
+                templateSelect.innerHTML = '';
+                toArray(metadataTemplateField.querySelectorAll('option')).forEach((option) => {
+                    const clone = option.cloneNode(true);
+                    templateSelect.appendChild(clone);
+                });
+                templateSelect.value = metadataTemplateField.value || '';
+            }
+        };
+
+        const updateTemplateSelection = (value) => {
+            if (metadataTemplateField) {
+                metadataTemplateField.value = value;
+            }
+            updateMetadataState();
+        };
+
+        const init = () => {
+            ensureTemplateOptions();
+            toArray(dataSourceRadios).forEach((radio) => {
+                radio.addEventListener('change', (event) => {
+                    setDataSource(event.target.value);
+                });
+            });
+            toArray(metadataModeRadios).forEach((radio) => {
+                radio.addEventListener('change', (event) => {
+                    setMetadataMode(event.target.value);
+                });
+            });
+            if (datasetSelect) {
+                datasetSelect.addEventListener('change', () => {
+                    if (metadataTemplateField) {
+                        metadataTemplateField.value = datasetSelect.value;
+                    }
+                    if (!jobIsRunning) {
+                        resetStatusPanel();
+                    }
+                    updatePreview();
+                });
+            }
+            if (metadataTemplateField) {
+                metadataTemplateField.addEventListener('change', () => {
+                    if (!jobIsRunning) {
+                        resetStatusPanel();
+                    }
+                    updatePreview();
+                });
+            }
+            templateSelect.addEventListener('change', () => {
+                updateTemplateSelection(templateSelect.value);
+                if (stagedUpload) {
+                    metadataReady = Boolean(templateSelect.value);
+                    finalizeStatus.textContent = metadataReady ? 'Using selected template metadata.' : '';
+                    finalizeStatus.dataset.state = metadataReady ? 'saved' : '';
+                    if (metadataReminder) metadataReminder.hidden = metadataReady;
+                    if (metadataReady) {
+                        showAdvanced();
+                    } else {
+                        hideAdvanced();
+                    }
+                    setMetadataMode('template');
+                }
+                updateRunButton();
+            });
+            fileInput.addEventListener('change', () => {
+                clearUploadState();
+                if (fileInput.files && fileInput.files.length) {
+                    handleFileUpload();
+                }
+            });
+            datasetNameInput.addEventListener('input', () => {
+                if (stagedUpload) {
+                    metadataReady = false;
+                    finalizeStatus.dataset.state = '';
+                    customMetadataDirty = true;
+                    finalizeButton.disabled = false;
+                    finalizeButton.hidden = false;
+                    if (metadataReminder) metadataReminder.hidden = false;
+                    if (!jobIsRunning) {
+                        resetStatusPanel();
+                    }
+                    updateRunButton();
+                    updatePreview();
+                }
+            });
+            tableNameInput.addEventListener('input', () => {
+                if (stagedUpload) {
+                    metadataReady = false;
+                    finalizeStatus.dataset.state = '';
+                    customMetadataDirty = true;
+                    finalizeButton.disabled = false;
+                    finalizeButton.hidden = false;
+                    currentTable = tableNameInput.value || stagedUpload.tableName;
+                    if (metadataReminder) metadataReminder.hidden = false;
+                    if (!jobIsRunning) {
+                        resetStatusPanel();
+                    }
+                    updateRunButton();
+                    updatePreview();
+                }
+            });
+            finalizeButton.addEventListener('click', finalizeCustomMetadata);
+            ['id_epochs_vae', 'id_epochs_gnn', 'id_epochs_diff'].forEach((id) => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.addEventListener('input', updatePreview);
+                }
+            });
+            if (formElement) {
+                formElement.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    startPipelineRun();
+                });
+            }
+            window.addEventListener('beforeunload', stopStatusPoll);
+            ensureTemplateOptions();
+            resetStatusPanel();
+            toggleStatusPlaceholder();
+            setDataSource(getSelectedDataSource());
+            setMetadataMode('template');
+            updatePreview();
+            updateRunButton();
+        };
+
+        init();
+    })();
+    </script>-->
+{% endblock %}

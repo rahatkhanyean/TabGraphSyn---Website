@@ -1,0 +1,36 @@
+# local package
+
+git+https://github.com/martinjurkovic/syntherela.git
+# external requirements
+pymongo>=4.6
+numpy
+pandas
+scikit-learn
+scipy
+icecream
+xlrd
+tomli-w
+zero
+category_encoders
+kaggle
+transformers
+datasets
+peft
+openpyxl
+torch_geometric==2.4.0
+xgboost
+seaborn
+--find-links https://data.pyg.org/whl/torch-2.0.1+cu118.html
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+torch==2.2.0+cu118
+torchvision==2.2.0+cu118
+torchaudio==2.2.0+cu118
+
+torch-scatter
+torch-sparse
+torch-cluster
+torch-spline-conv
+torch-geometric==2.4.0
+
+transformers<=4.41.2

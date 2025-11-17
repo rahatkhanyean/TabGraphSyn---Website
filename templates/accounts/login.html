@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Sign in - TabGraphSyn{% endblock %}
+{% block content %}
+<div class="auth-wrapper">
+    <div class="card auth-card">
+        <div class="card-header">
+            <div>
+                <div class="card-header-meta">Account access</div>
+                <h1 class="section-title">Sign in to continue</h1>
+                <p class="card-subtitle">Authenticate with credentials stored in MongoDB before orchestrating new synthetic data jobs.</p>
+            </div>
+        </div>
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}" />
+            {% if form.non_field_errors %}
+                <div class="alert alert-error">
+                    {% for error in form.non_field_errors %}
+                        <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="field-block">
+                <label class="field-label" for="id_username">{{ form.username.label }}</label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                    <div class="field-error">{{ form.username.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+            <div class="field-block">
+                <label class="field-label" for="id_password">{{ form.password.label }}</label>
+                {{ form.password }}
+                {% if form.password.errors %}
+                    <div class="field-error">{{ form.password.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+            <div class="card-actions">
+                <button type="submit" class="primary-button">Sign in</button>
+            </div>
+        </form>
+        <p class="text-muted">Need an account? <a href="{% url 'accounts:register' %}">Create one here.</a></p>
+    </div>
+</div>
+{% endblock %}

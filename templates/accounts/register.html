@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Create account - TabGraphSyn{% endblock %}
+{% block content %}
+<div class="auth-wrapper">
+    <div class="card auth-card">
+        <div class="card-header">
+            <div>
+                <div class="card-header-meta">Create account</div>
+                <h1 class="section-title">Spin up a workspace login</h1>
+                <p class="card-subtitle">Choose any username and password. Entries are written directly to MongoDB.</p>
+            </div>
+        </div>
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="alert alert-error">
+                    {% for error in form.non_field_errors %}
+                        <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="field-block">
+                <label class="field-label" for="id_username">{{ form.username.label }}</label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                    <div class="field-error">{{ form.username.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+            <div class="field-block">
+                <label class="field-label" for="id_password">{{ form.password.label }}</label>
+                {{ form.password }}
+                {% if form.password.errors %}
+                    <div class="field-error">{{ form.password.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+            <div class="card-actions">
+                <button type="submit" class="primary-button">Create account</button>
+            </div>
+        </form>
+        <p class="text-muted">Already onboarded? <a href="{% url 'accounts:login' %}">Sign in here.</a></p>
+    </div>
+</div>
+{% endblock %}

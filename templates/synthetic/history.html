@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Run history - TabGraphSyn{% endblock %}
+{% block content %}
+<div class="content-container">
+    <div class="page-header">
+        <div>
+            <div class="page-chip">Activity</div>
+            <h1>Run history</h1>
+            <p class="page-subtitle">Latest synthetic data generations captured from MongoDB.</p>
+        </div>
+    </div>
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    {% if runs %}
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-header-meta">Recent runs</div>
+                    <h2 class="card-title">{{ runs|length }} recorded execution{{ runs|length|pluralize }}</h2>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Dataset</th>
+                            <th>Table</th>
+                            <th>Source</th>
+                            <th>Rows</th>
+                            <th>Started</th>
+                            <th>Finished</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for run in runs %}
+                            <tr>
+                                <td>{{ run.dataset }}</td>
+                                <td>{{ run.table }}</td>
+                                <td>{{ run.data_source|capfirst }}</td>
+                                <td>{{ run.generated_rows|default:'-' }}</td>
+                                <td>{{ run.started_at|default:run.requested_at }}</td>
+                                <td>{{ run.finished_at|default:'-' }}</td>
+                                <td>
+                                    <a class="secondary-button compact" href="{% url 'synthetic:result' token=run.token %}">View</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <p>You have not recorded any runs yet.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

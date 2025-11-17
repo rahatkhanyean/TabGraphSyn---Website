@@ -1,0 +1,401 @@
+﻿{% extends "base.html" %}
+{% load static %}
+
+{% block title %}TabGraphSyn Run{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/result.css' %}" />
+{% endblock %}
+
+{% block content %}
+    <div class="page-header">
+        <div>
+            <h1>TabGraphSyn run complete</h1>
+            <p class="page-subtitle">Inspect the generated artefacts and evaluation outputs from this run.</p>
+        </div>
+        <span class="result-chip">Success</span>
+    </div>
+
+    <div class="result-layout">
+        <div class="result-main">
+            <section class="card" highlight-card>
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Summary</div>
+                        <div class="card-subtitle">Snapshot of configuration and outputs.</div>
+                    </div>
+                </div>
+                <div class="highlight-grid">
+                    <div class="stat-tile">
+                        <span class="stat-label">Data source</span>
+                        <span class="stat-value">{{ metadata.data_source|default:"preloaded"|capfirst }}</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Dataset</span>
+                        <span class="stat-value">{{ metadata.dataset }}</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Table</span>
+                        <span class="stat-value">{{ metadata.table }}</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Generated rows</span>
+                        <span class="stat-value">{{ metadata.generated_rows|default:"n/a" }}</span>
+                    </div>
+                </div>
+                <ul class="summary-list">
+                    <li><strong>Data source:</strong> {{ metadata.data_source|default:"preloaded"|capfirst }}</li>
+                    <li><strong>Dataset:</strong> {{ metadata.dataset }}</li>
+                    <li><strong>Target table:</strong> {{ metadata.table }}</li>
+                    {% if metadata.data_source == 'uploaded' %}
+                        {% if metadata.input_filename %}<li><strong>Original file:</strong> {{ metadata.input_filename }}</li>{% endif %}
+                        {% if metadata.input_rows %}<li><strong>Input rows:</strong> {{ metadata.input_rows }}</li>{% endif %}
+                        <li><strong>Metadata mode:</strong> {% if metadata.metadata_mode == 'template' %}Template{% if metadata.metadata_template %} ({{ metadata.metadata_template }}){% endif %}{% else %}Custom{% endif %}</li>
+                    {% else %}
+                        {% if metadata.metadata_template %}<li><strong>Metadata template:</strong> {{ metadata.metadata_template }}</li>{% endif %}
+                    {% endif %}
+                    {% if metadata.generated_rows %}<li><strong>Generated rows:</strong> {{ metadata.generated_rows }}</li>{% endif %}
+                    <li><strong>Skip preprocessing:</strong> {{ metadata.skip_preprocessing|yesno:"Yes,No" }}</li>
+                    {% if metadata.epochs_gnn %}<li><strong>GNN epochs:</strong> {{ metadata.epochs_gnn }}</li>{% endif %}
+                    {% if metadata.epochs_vae %}<li><strong>VAE epochs:</strong> {{ metadata.epochs_vae }}</li>{% endif %}
+                    {% if metadata.epochs_diff %}<li><strong>Diffusion epochs:</strong> {{ metadata.epochs_diff }}</li>{% endif %}
+                </ul>
+                <div class="action-row">
+                    {% if has_output %}
+                        <a href="{{ download_url }}" class="primary-button">Download synthetic CSV</a>
+                    {% else %}
+                        <span class="secondary-button" is-disabled aria-disabled="true">No synthetic CSV for this run</span>
+                    {% endif %}
+                    <a href="{% url 'synthetic:upload' %}" class="secondary-button">Run another experiment</a>
+                </div>
+            </section>
+
+            {% if evaluation %}
+            <section class="card" evaluation-card>
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Evaluation</div>
+                        <div class="card-subtitle">Quantitative assessment of the synthetic cohort.</div>
+                    </div>
+                </div>
+                {% if evaluation.status == 'success' %}
+                    {% if evaluation_rows %}
+                        <div class="table-wrapper">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        {% for header in evaluation_headers %}
+                                            <th>{{ header }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in evaluation_rows %}
+                                        <tr>
+                                            {% for cell in row %}
+                                                <td>{{ cell }}</td>
+                                            {% endfor %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="empty-state">Evaluation completed but did not return any metrics.</p>
+                    {% endif %}
+                    {% if evaluation_plot_data_uri %}
+                        <div class="image-wrapper">
+                            <img src="{{ evaluation_plot_data_uri }}" alt="UMAP projection">
+                        </div>
+                    {% elif evaluation_plot_path %}
+                        <p class="empty-state" style="margin-top: 16px;">UMAP plot saved at {{ evaluation_plot_path }}.</p>
+                    {% endif %}
+                    {% if evaluation_download_url %}
+                        <div class="action-row" style="margin-top: 16px;">
+                            <a href="{{ evaluation_download_url }}" class="secondary-button">Download UMAP PNG</a>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <p class="empty-state">Evaluation unavailable: {{ evaluation.error|default:"See run details for more information." }}</p>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            {% if epoch_metrics %}
+            <section class="card epoch-metrics-card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Training Progress</div>
+                        <div class="card-subtitle">Epoch-wise error metrics tracked during diffusion training.</div>
+                    </div>
+                </div>
+                <div class="epoch-metrics-info">
+                    <p style="margin: 0 0 16px; color: var(--text-muted); font-size: 14px;">
+                        Evaluated every <strong>{{ epoch_metrics.eval_frequency }}</strong> epochs using <strong>{{ epoch_metrics.num_eval_samples }}</strong> synthetic samples.
+                    </p>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <canvas id="marginalErrorChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="pairwiseErrorChart"></canvas>
+                    </div>
+                </div>
+                <div class="action-row" style="margin-top: 20px;">
+                    <button type="button" class="secondary-button compact" onclick="downloadChart('marginalErrorChart', 'marginal_error_chart.png')">Download Marginal Chart</button>
+                    <button type="button" class="secondary-button compact" onclick="downloadChart('pairwiseErrorChart', 'pairwise_error_chart.png')">Download Pairwise Chart</button>
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="card" data-card>
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Preview (first 20 rows)</div>
+                        <div class="card-subtitle">Sanity check the generated records before downstream use.</div>
+                    </div>
+                </div>
+                {% if has_output and preview_rows %}
+                    <div class="table-wrapper">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    {% for header in preview_headers %}
+                                        <th>{{ header }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview_rows %}
+                                    <tr>
+                                        {% for cell in row %}
+                                            <td>{{ cell }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% elif has_output %}
+                    <p class="empty-state">Synthetic file generated, but no rows were returned.</p>
+                {% else %}
+                    <p class="empty-state">This mode does not produce a sample file. Check the evaluation summary above for status.</p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if epoch_metrics %}
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+// Epoch metrics data from Django
+const epochMetricsData = JSON.parse('{{ epoch_metrics_json|escapejs }}');
+
+// Extract data for charts
+const epochs = [];
+const marginalErrors = [];
+const pairwiseErrors = [];
+const trainingLosses = [];
+
+epochMetricsData.forEach(entry => {
+    epochs.push(entry.epoch);
+    marginalErrors.push(entry.marginal_error || null);
+    pairwiseErrors.push(entry.pairwise_error || null);
+    trainingLosses.push(entry.train_loss || null);
+});
+
+// Chart configuration
+const chartConfig = {
+    type: 'line',
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2,
+        interaction: {
+            mode: 'index',
+            intersect: false,
+        },
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                    font: {
+                        size: 13,
+                        family: 'Inter, sans-serif'
+                    },
+                    padding: 15,
+                    usePointStyle: true,
+                }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                titleColor: '#fff',
+                bodyColor: '#e2e8f0',
+                borderColor: '#6366f1',
+                borderWidth: 1,
+                padding: 12,
+                displayColors: true,
+                callbacks: {
+                    label: function(context) {
+                        let label = context.dataset.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        if (context.parsed.y !== null) {
+                            label += context.parsed.y.toFixed(4);
+                        }
+                        return label;
+                    }
+                }
+            }
+        },
+        scales: {
+            x: {
+                title: {
+                    display: true,
+                    text: 'Epoch',
+                    font: {
+                        size: 14,
+                        weight: '600',
+                        family: 'Inter, sans-serif'
+                    },
+                    padding: {top: 10}
+                },
+                grid: {
+                    display: true,
+                    color: 'rgba(148, 163, 184, 0.1)',
+                },
+                ticks: {
+                    font: {
+                        size: 12,
+                        family: 'Inter, sans-serif'
+                    }
+                }
+            },
+            y: {
+                beginAtZero: false,
+                title: {
+                    display: true,
+                    text: 'Score',
+                    font: {
+                        size: 14,
+                        weight: '600',
+                        family: 'Inter, sans-serif'
+                    },
+                    padding: {bottom: 10}
+                },
+                grid: {
+                    display: true,
+                    color: 'rgba(148, 163, 184, 0.1)',
+                },
+                ticks: {
+                    font: {
+                        size: 12,
+                        family: 'Inter, sans-serif'
+                    }
+                }
+            }
+        }
+    }
+};
+
+// Marginal Error Chart
+const marginalCtx = document.getElementById('marginalErrorChart').getContext('2d');
+const marginalChart = new Chart(marginalCtx, {
+    ...chartConfig,
+    data: {
+        labels: epochs,
+        datasets: [
+            {
+                label: 'Marginal Distribution Error (Column Shapes)',
+                data: marginalErrors,
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                borderWidth: 3,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#6366f1',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                fill: true,
+            },
+            {
+                label: 'Training Loss',
+                data: trainingLosses,
+                borderColor: '#f97316',
+                backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                tension: 0.4,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: '#f97316',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                fill: false,
+                yAxisID: 'y',
+            }
+        ]
+    }
+});
+
+// Pairwise Error Chart
+const pairwiseCtx = document.getElementById('pairwiseErrorChart').getContext('2d');
+const pairwiseChart = new Chart(pairwiseCtx, {
+    ...chartConfig,
+    data: {
+        labels: epochs,
+        datasets: [
+            {
+                label: 'Pairwise Correlation Error (Column Pair Trends)',
+                data: pairwiseErrors,
+                borderColor: '#8b5cf6',
+                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                borderWidth: 3,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#8b5cf6',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                fill: true,
+            },
+            {
+                label: 'Training Loss',
+                data: trainingLosses,
+                borderColor: '#f97316',
+                backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                tension: 0.4,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: '#f97316',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                fill: false,
+                yAxisID: 'y',
+            }
+        ]
+    }
+});
+
+// Download chart as PNG
+function downloadChart(chartId, filename) {
+    const canvas = document.getElementById(chartId);
+    const url = canvas.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    link.click();
+}
+</script>
+{% endif %}
+{% endblock %}

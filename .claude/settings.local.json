@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py collectstatic:*)",
+      "Bash(docker --version:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(git init:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git config --global user.name)",
+      "Bash(git config --global user.email)",
+      "Bash(git add .)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

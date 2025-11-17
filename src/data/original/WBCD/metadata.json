@@ -1,0 +1,42 @@
+{
+  "tables": {
+    "WBCD": {
+      "columns": {
+        "Clump_Thickness": {
+          "sdtype": "categorical"
+        },
+        "Uniformity_of_Cell_Size": {
+          "sdtype": "categorical"
+        },
+        "Uniformity_of_Cell_Shape": {
+          "sdtype": "categorical"
+        },
+        "Marginal_Adhesion": {
+          "sdtype": "categorical"
+        },
+        "Single_Epithelial_Cell_Size": {
+          "sdtype": "categorical"
+        },
+        "Bare_Nuclei": {
+          "sdtype": "categorical"
+        },
+        "Bland_Chromatin": {
+          "sdtype": "categorical"
+        },
+        "Normal_Nucleoli": {
+          "sdtype": "categorical"
+        },
+        "Mitoses": {
+          "sdtype": "categorical"
+        },
+        "Class": {
+          "sdtype": "categorical"
+        },
+        "id": {
+          "sdtype": "id"
+        }
+      },
+      "primary_key": "id"
+    }
+  }
+}

@@ -1,0 +1,322 @@
+import pandas as pd
+import os
+import seaborn as sns
+import numpy as np
+import warnings
+warnings.filterwarnings('ignore')
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+import umap
+
+
+def evaluation_func(fake_file_ls, dataset_name = "Nothing", train_name = None):
+    drive_path = '/Datasets'
+
+    output_df = pd.DataFrame() 
+    
+    if train_name:
+        train_name_provided = True
+    else:
+        train_name_provided = False
+
+    # for real_frac in np.arange(0, 1.01, 0.025):
+    for fake_file_name in fake_file_ls:
+        
+        if os.path.isfile(fake_file_name):
+            print(fake_file_name)
+        else:
+            print("FILE NOT FOUND!")        
+        
+        
+        if r"\SingleTable\single_table" in fake_file_name:
+            dataset_name_suffix = '_Cond'
+        elif r"\Baseline\unconditional" in fake_file_name:
+            dataset_name_suffix = '_Uncond'
+        else:
+            dataset_name_suffix = ''
+        
+        
+        if train_name_provided:
+            pass
+        elif 'MIMIC' in fake_file_name:
+            train_name =    "./Datasets/MIMIC/mimic_statics_train.pkl"
+            dataset_name = 'MIMIC'
+        elif 'AIDS' in fake_file_name:
+            train_name =    "./Datasets/AIDS/cat16_num10/survival_AIDS_real_cat16_num10.pkl"
+            dataset_name = 'AIDS'
+        elif 'WBCD' in fake_file_name:
+            train_name =    "./Datasets/WBCD/breast_cancer_wisconsin_cat10.pkl"
+            dataset_name = 'WBCD'
+        elif 'TCGA' in fake_file_name:
+            train_name =    "./Datasets/TCGA/survival_tcga_stage_I_IV_train.pkl"
+            dataset_name = "TCGA"
+        else:
+            raise ValueError("Can't find real data!")
+
+        dataset_name += dataset_name_suffix
+
+
+        # train_name, fake_file_name = "./Datasets/WBCD/breast_cancer_wisconsin_cat10.pkl", "./Datasets/WBCD/survival_WBCD_GraphTabDDPM_250202_11_syn.pkl"
+        # train_name, fake_file_name  = "D:/research/Codebase/Datasets/AIDS/cat16_num10/survival_AIDS_real_cat16_num10.pkl", "D:/research/Codebase/Datasets/AIDS/cat16_num10/survival_AIDS_tabddpm_cat16_num10_50000_syn.pkl"
+
+
+
+
+
+        
+
+        selected_methods = ['CasTGAN']
+
+
+
+        if 'WBCD' in train_name:
+            if train_name.split(".")[-1] == 'pkl':
+                df_kept = pd.read_pickle(train_name).astype(float)
+            elif train_name.split(".")[-1] == 'csv':
+                df_kept = pd.read_csv(train_name).astype(float)
+            else:
+                raise TypeError('Synthetic data format not in pkl or csv!')
+            
+            if fake_file_name.split(".")[-1] == 'pkl':
+                fake_df_kept = pd.read_pickle(fake_file_name)
+            elif fake_file_name.split(".")[-1] == 'csv':
+                fake_df_kept = pd.read_csv(fake_file_name)
+                try:
+                    fake_df_kept = fake_df_kept.drop('id', axis=1)
+                except:
+                    print("No id column in the synthetic data!")
+            else:
+                raise TypeError('Synthetic data format not in pkl or csv!')
+            
+            for col in df_kept.columns[:-1]:
+                df_kept[col] = df_kept[col].astype('float')
+                fake_df_kept[col] = fake_df_kept[col].astype('float')
+            df_kept[df_kept.columns[-1]] = df_kept[df_kept.columns[-1]].astype('int').astype('str')
+            fake_df_kept[df_kept.columns[-1]] = fake_df_kept[df_kept.columns[-1]].astype('int').astype('str')
+
+        else:
+            if train_name.split(".")[-1] == 'pkl':
+                df_kept = pd.read_pickle(train_name)
+            elif train_name.split(".")[-1] == 'csv':
+                df_kept = pd.read_csv(train_name)
+            else:
+                raise TypeError('Synthetic data format not in pkl or csv!')
+            if fake_file_name.split(".")[-1] == 'pkl':
+                fake_df_kept = pd.read_pickle(fake_file_name)
+            elif fake_file_name.split(".")[-1] == 'csv':
+                fake_df_kept = pd.read_csv(fake_file_name)
+                try:
+                    fake_df_kept = fake_df_kept.drop('id', axis=1)
+                except:
+                    print("No id column in the synthetic data!")
+            else:
+                raise TypeError('Synthetic data format not in pkl or csv!')
+            
+            # Align data types
+            for col in df_kept.columns:
+                if type(df_kept.loc[0, col]) == str:
+                    fake_df_kept[col] = fake_df_kept[col].astype('str')
+                
+
+        df = df_kept.copy()
+        fake_df = fake_df_kept.copy()
+
+
+        # Identify categorical columns
+        catg_cols = df.select_dtypes(include=['object', 'category' , 'bool']).columns.tolist()
+
+        # Align categories by replacing non-overlapping categories with 'unknown'
+        for col in catg_cols:
+            # Convert to string to ensure consistency
+            df[col] = df[col].astype(str)
+            fake_df[col] = fake_df[col].astype(str)
+
+            # Get unique categories in each dataset
+            real_categories = set(df[col].unique())
+            fake_categories = set(fake_df[col].unique())
+
+            # Find common categories
+            common_categories = real_categories.intersection(fake_categories)
+
+            # Replace categories not in common with 'unknown' in df
+            df[col] = df[col].apply(lambda x: x if x in common_categories else 'unknown')
+
+            # Replace categories not in common with 'unknown' in fake_df
+            fake_df[col] = fake_df[col].apply(lambda x: x if x in common_categories else 'unknown')
+
+
+        import importlib
+        import sdmetrics.single_table
+        importlib.reload(sdmetrics.single_table)
+        from sdmetrics.single_table import LogisticDetection, SVCDetection
+        from sdv.metadata import SingleTableMetadata
+
+
+
+        metadata = SingleTableMetadata()
+        metadata.detect_from_dataframe(df)
+
+
+
+        # Assume `real_data` and `synthetic_data` are pandas DataFrames with the same schema.
+        df['is_real'] = 1
+        fake_df['is_real'] = 0
+
+        combined_data = pd.concat([df, fake_df], ignore_index=True)
+        X = combined_data.drop(columns=['is_real'])
+        y = combined_data['is_real']
+        from sklearn.model_selection import train_test_split
+
+        from sklearn.preprocessing import LabelEncoder
+        X_encoded = X.copy()
+        encoders = {}
+        for col in catg_cols:
+            encoders[col] = LabelEncoder()
+            X_encoded[col] = encoders[col].fit_transform(X[col].astype(str))
+        
+
+        X_train, X_test, y_train, y_test = train_test_split(X_encoded, y, test_size=0.3, random_state=42)
+        from sklearn.ensemble import RandomForestClassifier
+
+        classifier = RandomForestClassifier(random_state=42)
+        classifier.fit(X_train, y_train)
+        from sklearn.metrics import roc_auc_score
+
+        y_pred_prob = classifier.predict_proba(X_test)[:, 1]
+        detection_score = roc_auc_score(y_test, y_pred_prob)
+
+
+        # print(f" AUC: {round(detection_score,2)}")
+        score = round(1-(max(detection_score,0.5)*2-1),4)
+
+
+        df = df_kept.copy()
+        fake_df = fake_df_kept.copy()
+
+        from sdmetrics.reports.single_table import QualityReport
+        report = QualityReport()
+        report.generate(df, fake_df, metadata.to_dict(), verbose=False)
+        quality_score = report.get_score()
+
+
+        from sklearn.model_selection import train_test_split
+
+        # Split the dataset into training and test sets with a 20% test ratio
+        # train_data, test_data = train_test_split(df, test_size=0.2, random_state=42, stratify=df['conditions'])
+        train_data, test_data = train_test_split(df, test_size=0.2, random_state=42)
+
+        catg_cols = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
+        fake_dict = {}
+        fake_dict['CasTGAN'] = fake_df
+        for method in selected_methods:
+                fake_dict[method] = fake_df
+
+        import numpy as np
+        # var =      [(fake_df['mort_icu'] == 1),
+        #               (fake_df['mort_icu'] == 0) & (fake_df['mort_hosp'] == 1),
+        #               (fake_df['mort_hosp'] == 0) & (fake_df['readmission_30'] == 1),
+        #               (fake_df['readmission_30'] == 0) ]
+        # values = [ 'mortality_icu', 'mortality_hos', 'read_30days', 'no_read_30days' ]
+        # fake_df['syn_condition'] = np.select(var, values)
+        # logic_lost_score = (fake_df['syn_condition']!=fake_df['conditions']).sum()/len(fake_df)*100
+
+        from Evaluation.PlotNormDist import models_evaluator
+
+        mod_eval = models_evaluator(train_set = train_data, test_set = test_data, dataset_name = dataset_name, categorical_cols = catg_cols,
+                                response_var = train_data.columns[-1], pred_task = 'multi_classification', syn_output = fake_dict, random_seed = 88000, positive_val=1)
+        uni_metrics = mod_eval.univariate_stats(train_set = df, categorical_cols = catg_cols, syn_output = fake_dict)
+
+
+
+        real_df = df
+        categorical_columns = catg_cols
+        concat_df = pd.concat([real_df, fake_df])
+        concat_encoded = pd.get_dummies(concat_df, columns=categorical_columns)
+        real_df_encoded = concat_encoded[:len(real_df)]
+        fake_df_encoded = concat_encoded[len(real_df):]
+
+        # Step 2: Scale the data
+        real_scaler = StandardScaler()
+        real_scaled_data = real_scaler.fit_transform(real_df_encoded)
+        fake_scaled_data = real_scaler.transform(fake_df_encoded)
+
+        # Step 4: Fit UMAP
+        # Create a UMAP instance and reduce dimensionality
+        # real_reducer = umap.UMAP(n_neighbors=15, n_components=2, metric='euclidean', random_state=42)
+        real_reducer = umap.UMAP(random_state=42)
+        real_embedding = real_reducer.fit_transform(real_scaled_data)
+        fake_embedding = real_reducer.transform(fake_scaled_data)
+
+        foreground_points = real_embedding
+        background_points = np.concatenate((real_embedding, fake_embedding), axis=0)
+        vantage_point = np.mean(np.concatenate((real_embedding, fake_embedding), axis=0))
+        scanning_window =0.1*np.pi
+        angle_range = np.linspace(0, 2*np.pi, 360)
+        resolution=1000
+        mode="relative"
+        rsp_area, diffs = calculate_area(
+                                    foreground_points,
+                                    background_points,
+                                    vantage_point,
+                                    scanning_window,
+                                    angle_range,
+                                    resolution,
+                                    mode,
+                                )
+
+        plt.figure(figsize=(10, 8))
+        plt.scatter(real_embedding[:, 0], real_embedding[:, 1], s=5, color='red', alpha=0.6)
+        plt.scatter(fake_embedding[:, 0], fake_embedding[:, 1], s=5, color='blue', alpha=0.3)
+        # plt.colorbar(boundaries=np.arange(len(np.unique(labels))+1)-0.5).set_ticks(np.arange(len(np.unique(labels))))
+        # plt.title(f'UMAP_{dataset_name}', fontsize=24)
+        plt.legend(['Real','Synthetic (TabGraphSyn)'], fontsize=16)
+        plt.savefig(f'./Someplots/UMAP_{dataset_name}.png')
+
+
+        d = {}
+        # d['Real %'] = real_frac*100
+        d['Quality Score'] = quality_score
+        d.update(report.get_properties().set_index('Property').to_dict()['Score'])
+        d['Detection Score'] = round(score,4)
+        # d['Logic Lost %'] = round(logic_lost_score,2)
+        d.update(uni_metrics[selected_methods[0]])
+        d['rsp_area_relative'] = round(rsp_area,4)
+
+        from sdmetrics.single_table import NewRowSynthesis
+        NewRowSynthesis_score = NewRowSynthesis.compute(
+            real_data=df,
+            synthetic_data=fake_df,
+            metadata=metadata.to_dict(),
+            numerical_match_tolerance=0.5,
+            synthetic_sample_size=len(df)
+        )
+        d['NewRowSynthesis_score'] = NewRowSynthesis_score
+        
+        from sdmetrics.single_table import DCRBaselineProtection
+
+        DCR_score = DCRBaselineProtection.compute_breakdown(
+            real_data=df,
+            synthetic_data=fake_df,
+            metadata=metadata.to_dict()
+        )
+        d['DCR_score'] = DCR_score
+        
+        output_df = pd.concat([output_df, pd.DataFrame(d, index=[0])])
+        # print(pd.DataFrame(d, index=[0]))
+
+        # old_num_name, old_cat_name = "Someplots/mimic_statics_full_num_dist.pdf", "Someplots/mimic_statics_full_cat_dist.pdf"
+        # new_num_name, new_cat_name = f"Someplots/mimic_statics_full_{suffix_name}_num_dist.pdf", f"Someplots/mimic_statics_full_{suffix_name}_cat_dist.pdf"
+        # os.rename(old_num_name, new_num_name)
+        # os.rename(old_cat_name, new_cat_name)
+
+    # output_df.rename(columns={'Column Shapes': 'Dist Shape Score', 'Column Pair Trends': 'Pairwise Corr Score'}, inplace=True)
+    return output_df.round(4)
+
+
+fake_file_ls = [r'E:\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\MIMIC.csv',
+                r'E:\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\TCGA.csv',
+                r'E:\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\AIDS.csv',
+                r'E:\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\WBCD.csv']
+
+output_df = evaluation_func(fake_file_ls)
+output_df

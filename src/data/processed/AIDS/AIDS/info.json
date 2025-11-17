@@ -1,0 +1,431 @@
+{
+    "name": "AIDS",
+    "column_info": {
+        "0": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 70.0,
+            "min": 12.0
+        },
+        "1": {
+            "type": "numerical",
+            "subtype": "float",
+            "max": 159.93936,
+            "min": 31.0
+        },
+        "5": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 100.0,
+            "min": 70.0
+        },
+        "9": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 2851.0,
+            "min": 0.0
+        },
+        "17": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1199.0,
+            "min": 0.0
+        },
+        "18": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1119.0,
+            "min": 50.0
+        },
+        "19": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1190.0,
+            "min": 0.0
+        },
+        "21": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 5011.0,
+            "min": 105.0
+        },
+        "22": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 6035.0,
+            "min": 124.0
+        },
+        "24": {
+            "type": "numerical",
+            "subtype": "int",
+            "max": 1231.0,
+            "min": 33.0
+        },
+        "2": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "3": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "4": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1",
+                "0"
+            ]
+        },
+        "6": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "7": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1",
+                "0"
+            ]
+        },
+        "8": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1"
+            ]
+        },
+        "10": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1",
+                "0"
+            ]
+        },
+        "11": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "12": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1",
+                "0"
+            ]
+        },
+        "13": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "2",
+                "1",
+                "3"
+            ]
+        },
+        "14": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "15": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1",
+                "0"
+            ]
+        },
+        "16": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "1",
+                "0"
+            ]
+        },
+        "20": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "23": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "0",
+                "1"
+            ]
+        },
+        "25": {
+            "type": "categorical",
+            "subtype": "str",
+            "categorizes": [
+                "3",
+                "0",
+                "2",
+                "1"
+            ]
+        }
+    },
+    "num_col_idx": [
+        0,
+        1,
+        5,
+        9,
+        17,
+        18,
+        19,
+        21,
+        22,
+        24
+    ],
+    "cat_col_idx": [
+        2,
+        3,
+        4,
+        6,
+        7,
+        8,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        20,
+        23,
+        25
+    ],
+    "column_names": [
+        "age",
+        "wtkg",
+        "hemo",
+        "homo",
+        "drugs",
+        "karnof",
+        "oprior",
+        "z30",
+        "zprior",
+        "preanti",
+        "race",
+        "gender",
+        "str2",
+        "strat",
+        "symptom",
+        "treat",
+        "offtrt",
+        "cd40",
+        "cd420",
+        "cd496",
+        "r",
+        "cd80",
+        "cd820",
+        "cens",
+        "days",
+        "arms"
+    ],
+    "train_num": 1925,
+    "test_num": 214,
+    "idx_mapping": {
+        "0": 0,
+        "1": 1,
+        "2": 10,
+        "3": 11,
+        "4": 12,
+        "5": 2,
+        "6": 13,
+        "7": 14,
+        "8": 15,
+        "9": 3,
+        "10": 16,
+        "11": 17,
+        "12": 18,
+        "13": 19,
+        "14": 20,
+        "15": 21,
+        "16": 22,
+        "17": 4,
+        "18": 5,
+        "19": 6,
+        "20": 23,
+        "21": 7,
+        "22": 8,
+        "23": 24,
+        "24": 9,
+        "25": 25
+    },
+    "inverse_idx_mapping": {
+        "0": 0,
+        "1": 1,
+        "10": 2,
+        "11": 3,
+        "12": 4,
+        "2": 5,
+        "13": 6,
+        "14": 7,
+        "15": 8,
+        "3": 9,
+        "16": 10,
+        "17": 11,
+        "18": 12,
+        "19": 13,
+        "20": 14,
+        "21": 15,
+        "22": 16,
+        "4": 17,
+        "5": 18,
+        "6": 19,
+        "23": 20,
+        "7": 21,
+        "8": 22,
+        "24": 23,
+        "9": 24,
+        "25": 25
+    },
+    "idx_name_mapping": {
+        "0": "age",
+        "1": "wtkg",
+        "2": "hemo",
+        "3": "homo",
+        "4": "drugs",
+        "5": "karnof",
+        "6": "oprior",
+        "7": "z30",
+        "8": "zprior",
+        "9": "preanti",
+        "10": "race",
+        "11": "gender",
+        "12": "str2",
+        "13": "strat",
+        "14": "symptom",
+        "15": "treat",
+        "16": "offtrt",
+        "17": "cd40",
+        "18": "cd420",
+        "19": "cd496",
+        "20": "r",
+        "21": "cd80",
+        "22": "cd820",
+        "23": "cens",
+        "24": "days",
+        "25": "arms"
+    },
+    "metadata": {
+        "columns": {
+            "0": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "1": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "5": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "9": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "17": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "18": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "19": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "21": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "22": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "24": {
+                "sdtype": "numerical",
+                "computer_representation": "Float"
+            },
+            "2": {
+                "sdtype": "categorical"
+            },
+            "3": {
+                "sdtype": "categorical"
+            },
+            "4": {
+                "sdtype": "categorical"
+            },
+            "6": {
+                "sdtype": "categorical"
+            },
+            "7": {
+                "sdtype": "categorical"
+            },
+            "8": {
+                "sdtype": "categorical"
+            },
+            "10": {
+                "sdtype": "categorical"
+            },
+            "11": {
+                "sdtype": "categorical"
+            },
+            "12": {
+                "sdtype": "categorical"
+            },
+            "13": {
+                "sdtype": "categorical"
+            },
+            "14": {
+                "sdtype": "categorical"
+            },
+            "15": {
+                "sdtype": "categorical"
+            },
+            "16": {
+                "sdtype": "categorical"
+            },
+            "20": {
+                "sdtype": "categorical"
+            },
+            "23": {
+                "sdtype": "categorical"
+            },
+            "25": {
+                "sdtype": "categorical"
+            }
+        }
+    }
+}

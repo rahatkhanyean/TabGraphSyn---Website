@@ -1,0 +1,100 @@
+{
+  "tables": {
+    "AIDS": {
+      "columns": {
+        "id": {
+          "sdtype": "id"
+        },
+        "age": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "wtkg": {
+          "sdtype": "numerical",
+          "computer_representation": "Float"
+        },
+        "hemo": {
+          "sdtype": "categorical"
+        },
+        "homo": {
+          "sdtype": "categorical"
+        },
+        "drugs": {
+          "sdtype": "categorical"
+        },
+        "karnof": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "oprior": {
+          "sdtype": "categorical"
+        },
+        "z30": {
+          "sdtype": "categorical"
+        },
+        "zprior": {
+          "sdtype": "categorical"
+        },
+        "preanti": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "race": {
+          "sdtype": "categorical"
+        },
+        "gender": {
+          "sdtype": "categorical"
+        },
+        "str2": {
+          "sdtype": "categorical"
+        },
+        "strat": {
+          "sdtype": "categorical"
+        },
+        "symptom": {
+          "sdtype": "categorical"
+        },
+        "treat": {
+          "sdtype": "categorical"
+        },
+        "offtrt": {
+          "sdtype": "categorical"
+        },
+        "cd40": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd420": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd496": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "r": {
+          "sdtype": "categorical"
+        },
+        "cd80": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd820": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cens": {
+          "sdtype": "categorical"
+        },
+        "days": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "arms": {
+          "sdtype": "categorical"
+        }
+      },
+      "primary_key": "id"
+    }
+  }
+}

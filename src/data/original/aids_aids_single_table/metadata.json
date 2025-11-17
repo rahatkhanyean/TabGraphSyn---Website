@@ -1,0 +1,117 @@
+{
+  "tables": {
+    "aids_aids_single_table": {
+      "columns": {
+        "age": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "wtkg": {
+          "sdtype": "numerical",
+          "computer_representation": "Float"
+        },
+        "hemo": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "homo": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "drugs": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "karnof": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "oprior": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "z30": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "zprior": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "preanti": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "race": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "gender": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "str2": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "strat": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "symptom": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "treat": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "offtrt": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd40": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd420": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd496": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "r": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd80": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cd820": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "cens": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "days": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "arms": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "id": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        }
+      }
+    }
+  },
+  "relationships": []
+}

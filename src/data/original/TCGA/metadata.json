@@ -1,0 +1,52 @@
+{
+  "tables": {
+    "TCGA": {
+      "columns": {
+        "id": {
+          "sdtype": "id"
+        },
+        "cancer type abbreviation": {
+          "sdtype": "categorical"
+        },
+        "age_at_initial_pathologic_diagnosis": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "gender": {
+          "sdtype": "categorical"
+        },
+        "race": {
+          "sdtype": "categorical"
+        },
+        "ajcc_pathologic_tumor_stage": {
+          "sdtype": "categorical"
+        },
+        "histological_type": {
+          "sdtype": "categorical"
+        },
+        "initial_pathologic_dx_year": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "birth_days_to": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        },
+        "vital_status": {
+          "sdtype": "categorical"
+        },
+        "tumor_status": {
+          "sdtype": "categorical"
+        },
+        "event_dss": {
+          "sdtype": "categorical"
+        },
+        "time_dss": {
+          "sdtype": "numerical",
+          "computer_representation": "Int64"
+        }
+      },
+      "primary_key": "id"
+    }
+  }
+}
