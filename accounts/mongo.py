@@ -50,6 +50,30 @@ def get_runs_collection() -> Collection:
     return get_collection(cfg['RUNS_COLLECTION'])
 
 
+def get_jobs_collection() -> Collection:
+    """Get jobs collection for async job queue metadata"""
+    cfg = _connection_settings()
+    return get_collection(cfg.get('JOBS_COLLECTION', 'jobs'))
+
+
+def get_subscriptions_collection() -> Collection:
+    """Get subscriptions collection for payment/billing data"""
+    cfg = _connection_settings()
+    return get_collection(cfg.get('SUBSCRIPTIONS_COLLECTION', 'subscriptions'))
+
+
+def get_notifications_collection() -> Collection:
+    """Get notifications collection for user notifications"""
+    cfg = _connection_settings()
+    return get_collection(cfg.get('NOTIFICATIONS_COLLECTION', 'notifications'))
+
+
+def get_datasets_collection() -> Collection:
+    """Get datasets collection for chatbot dataset catalog"""
+    cfg = _connection_settings()
+    return get_collection(cfg.get('DATASETS_COLLECTION', 'datasets'))
+
+
 def fetch_user(username: str) -> Optional[dict[str, Any]]:
     collection = get_users_collection()
     return collection.find_one({'username': username})

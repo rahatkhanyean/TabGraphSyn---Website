@@ -13,6 +13,19 @@ services:
     networks:
       - tabgraphsyn_network
 
+  # Redis (Message Broker + Cache + Session Store)
+  redis:
+    image: redis:7.2-alpine
+    container_name: tabgraphsyn_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - tabgraphsyn_network
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
   # Django web application
   web:
     build: .
@@ -30,14 +43,113 @@ services:
       - TABGRAPHSYN_MONGO_DB=tabgraphsyn
       - TABGRAPHSYN_MONGO_USERS_COLLECTION=users
       - TABGRAPHSYN_MONGO_RUNS_COLLECTION=runs
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
     depends_on:
       - mongodb
+      - redis
     networks:
       - tabgraphsyn_network
     command: python manage.py runserver 0.0.0.0:8000
 
+  # Celery Worker (CPU - Free Tier)
+  celery_worker_cpu:
+    build: .
+    container_name: tabgraphsyn_celery_cpu
+    restart: unless-stopped
+    volumes:
+      - .:/app
+      - media_volume:/app/media
+    environment:
+      - DJANGO_SETTINGS_MODULE=tabgraphsyn_site.settings
+      - TABGRAPHSYN_MONGO_URI=mongodb://mongodb:27017
+      - TABGRAPHSYN_MONGO_DB=tabgraphsyn
+      - TABGRAPHSYN_MONGO_USERS_COLLECTION=users
+      - TABGRAPHSYN_MONGO_RUNS_COLLECTION=runs
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - tabgraphsyn_network
+    command: celery -A tabgraphsyn_site worker -Q cpu --concurrency=2 --loglevel=info --hostname=cpu@%h
+
+  # Celery Worker (GPU - Paid Tier) - Disabled by default, enable on GPU instance
+  # celery_worker_gpu:
+  #   build: .
+  #   container_name: tabgraphsyn_celery_gpu
+  #   restart: unless-stopped
+  #   volumes:
+  #     - .:/app
+  #     - media_volume:/app/media
+  #   environment:
+  #     - DJANGO_SETTINGS_MODULE=tabgraphsyn_site.settings
+  #     - TABGRAPHSYN_MONGO_URI=mongodb://mongodb:27017
+  #     - TABGRAPHSYN_MONGO_DB=tabgraphsyn
+  #     - REDIS_URL=redis://redis:6379/0
+  #     - CELERY_BROKER_URL=redis://redis:6379/0
+  #     - CELERY_RESULT_BACKEND=redis://redis:6379/1
+  #   depends_on:
+  #     - mongodb
+  #     - redis
+  #   networks:
+  #     - tabgraphsyn_network
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   command: celery -A tabgraphsyn_site worker -Q gpu --concurrency=1 --loglevel=info --hostname=gpu@%h
+
+  # Celery Beat (Scheduler for periodic tasks)
+  celery_beat:
+    build: .
+    container_name: tabgraphsyn_celery_beat
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=tabgraphsyn_site.settings
+      - TABGRAPHSYN_MONGO_URI=mongodb://mongodb:27017
+      - TABGRAPHSYN_MONGO_DB=tabgraphsyn
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - tabgraphsyn_network
+    command: celery -A tabgraphsyn_site beat --loglevel=info
+
+  # Flower (Celery Monitoring Dashboard)
+  flower:
+    build: .
+    container_name: tabgraphsyn_flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    volumes:
+      - .:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=tabgraphsyn_site.settings
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    depends_on:
+      - redis
+      - celery_worker_cpu
+    networks:
+      - tabgraphsyn_network
+    command: celery -A tabgraphsyn_site flower --port=5555
+
 volumes:
   mongodb_data:
+  redis_data:
   static_volume:
   media_volume:
 
