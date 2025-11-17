@@ -475,6 +475,8 @@ button:focus-visible {
     box-shadow: var(--shadow-sm);
     padding: 32px;
     transition: all var(--transition-base);
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .card:hover {
@@ -745,8 +747,9 @@ button:focus-visible {
     margin-top: 16px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-subtle);
-    overflow: auto;
+    overflow-x: auto;
     background: white;
+    max-width: 100%;
 }
 
 .data-table {
@@ -754,6 +757,7 @@ button:focus-visible {
     border-collapse: collapse;
     font-size: 14px;
     min-width: 560px;
+    max-width: 100%;
 }
 
 .data-table th,
