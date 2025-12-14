@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.decorators import workspace_api_login_required, workspace_login_required
+# Authentication decorators removed - using session-based tracking instead
 
 from .forms import SyntheticDataForm
 from .staging import (
@@ -53,6 +53,29 @@ FALLBACK_DATASETS = {
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_or_create_user_id(request: HttpRequest) -> str:
+    """
+    Get or create a unique user identifier based on session.
+    This allows tracking user history without authentication.
+    """
+    if not request.session.session_key:
+        request.session.create()
+    return request.session.session_key
+
+
+def _get_user_profile(request: HttpRequest) -> dict[str, Any]:
+    """
+    Create a user profile dict from session for compatibility with existing code.
+    """
+    user_id = _get_or_create_user_id(request)
+    return {
+        'username': user_id,
+        'display_name': f'User-{user_id[:8]}',
+        'full_name': f'Anonymous User',
+        'name': f'User-{user_id[:8]}',
+    }
 
 
 # Job preparation details captured before launching the pipeline.
@@ -318,7 +341,6 @@ def _run_pipeline_job(job_token: str, prepared: PreparedRun) -> None:
         traceback.print_exc()
 
 
-@workspace_login_required
 def upload_view(request: HttpRequest) -> HttpResponse:
     dataset_map = _dataset_table_map()
     dataset_choices = [(name, name) for name in dataset_map.keys()]
@@ -361,7 +383,7 @@ def upload_view(request: HttpRequest) -> HttpResponse:
         )
 
         if prepared:
-            owner_profile = request.session.get('auth_user')
+            owner_profile = _get_user_profile(request)
             prepared.owner = owner_profile
             prepared.started_at = timezone.now().isoformat()
             try:
@@ -421,23 +443,49 @@ def upload_view(request: HttpRequest) -> HttpResponse:
     return render(request, 'synthetic/upload.html', context)
 
 
-@workspace_login_required
 def history_view(request: HttpRequest) -> HttpResponse:
-    user = request.session.get('auth_user') or {}
+    user = _get_user_profile(request)
     username = user.get('username')
     runs: list[dict[str, Any]] = []
     error: str | None = None
+    active_job_token: str | None = None
+
+    # Check if there's an active job for this user
+    # Get the job token from session if available
+    session_job_token = request.session.get('active_job_token')
+
+    if session_job_token:
+        # Check if the job is still running
+        job_state = job_tracker.get_job(session_job_token)
+        if job_state and job_state.stage in ('completed', 'failed'):
+            # Job is done, clear it from session
+            del request.session['active_job_token']
+            request.session.modified = True
+            active_job_token = None
+        elif job_state:
+            # Job is still running
+            active_job_token = session_job_token
+        else:
+            # Job not found (might have been cleaned up)
+            del request.session['active_job_token']
+            request.session.modified = True
+            active_job_token = None
+
     if username:
         try:
             runs = fetch_runs_for_user(username, limit=50)
         except RuntimeError as exc:
             error = str(exc)
-    context = {'runs': runs, 'error': error}
+
+    context = {
+        'runs': runs,
+        'error': error,
+        'active_job_token': active_job_token,
+    }
     return render(request, 'synthetic/history.html', context)
 
 
 @require_POST
-@workspace_api_login_required
 def api_start_run(request: HttpRequest) -> JsonResponse:
     dataset_map = _dataset_table_map()
     dataset_choices = [(name, name) for name in dataset_map.keys()]
@@ -475,10 +523,14 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     if not prepared:
         return JsonResponse({'errors': _form_errors(form)}, status=400)
 
-    owner_profile = request.session.get('auth_user')
+    owner_profile = _get_user_profile(request)
     prepared.owner = owner_profile
     prepared.started_at = timezone.now().isoformat()
     job_token = _start_pipeline_job(prepared)
+
+    # Store the active job token in session so the history page can track it
+    request.session['active_job_token'] = job_token
+
     snapshot = job_tracker.get_job(job_token)
     payload: dict[str, Any] = {'jobToken': job_token}
     if snapshot:
@@ -491,7 +543,6 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     return JsonResponse(payload, status=202)
 
 
-@workspace_api_login_required
 def api_job_status(request: HttpRequest, token: str) -> JsonResponse:
     job = job_tracker.get_job(token)
     if job is None:
@@ -561,7 +612,6 @@ def _load_epoch_metrics(dataset: str, table: str, run_name: str) -> dict[str, An
         return None
 
 
-@workspace_login_required
 def result_view(request: HttpRequest, token: str) -> HttpResponse:
     csv_path = _data_path(token)
     meta_path = _metadata_path(token)
@@ -590,6 +640,7 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
     evaluation_plot_data_uri: str | None = None
     evaluation_plot_path: str | None = None
     evaluation_download_url: str | None = None
+    umap_coordinates: str | None = None
 
     raw_evaluation = metadata.get('evaluation')
     if isinstance(raw_evaluation, dict):
@@ -603,6 +654,11 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
         evaluation_plot_path = plot_payload.get('path')
         if evaluation_plot_path:
             evaluation_download_url = reverse('synthetic:download-plot', kwargs={'token': token})
+
+        # Get UMAP coordinates for interactive visualization
+        umap_coords = evaluation.get('umap_coordinates')
+        if umap_coords:
+            umap_coordinates = json.dumps(umap_coords)
 
     # Load epoch evaluation data if available
     epoch_metrics_data: dict[str, Any] | None = None
@@ -629,13 +685,13 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
         'evaluation_plot_data_uri': evaluation_plot_data_uri,
         'evaluation_plot_path': evaluation_plot_path,
         'evaluation_download_url': evaluation_download_url,
+        'umap_coordinates': umap_coordinates,
         'epoch_metrics': epoch_metrics_data,
         'epoch_metrics_json': epoch_metrics_json,
     }
     return render(request, 'synthetic/result.html', context)
 
 
-@workspace_login_required
 def download_view(request: HttpRequest, token: str) -> FileResponse:
     csv_path = _data_path(token)
     meta_path = _metadata_path(token)
@@ -649,7 +705,6 @@ def download_view(request: HttpRequest, token: str) -> FileResponse:
     return FileResponse(csv_path.open('rb'), as_attachment=True, filename=filename)
 
 
-@workspace_login_required
 def download_plot(request: HttpRequest, token: str) -> FileResponse:
     meta_path = _metadata_path(token)
     if not meta_path.exists():
@@ -673,8 +728,35 @@ def download_plot(request: HttpRequest, token: str) -> FileResponse:
     return FileResponse(plot_path.open('rb'), as_attachment=True, filename=filename)
 
 
+def api_dataset_view(request: HttpRequest, token: str) -> JsonResponse:
+    """API endpoint to serve the full dataset for a given run token."""
+    csv_path = _data_path(token)
+    meta_path = _metadata_path(token)
+
+    if not csv_path.exists() or not meta_path.exists():
+        return JsonResponse({'error': 'Dataset not found.'}, status=404)
+
+    try:
+        # Read the CSV file
+        df = pd.read_csv(csv_path)
+
+        # Convert to list of lists for JSON serialization
+        headers = df.columns.tolist()
+        rows = df.fillna('').astype(str).values.tolist()
+
+        response_data = {
+            'headers': headers,
+            'rows': rows,
+            'total_rows': len(rows)
+        }
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to load dataset: {str(e)}'}, status=500)
+
+
 @require_POST
-@workspace_api_login_required
 def api_stage_upload(request: HttpRequest) -> JsonResponse:
     upload = request.FILES.get('dataset')
     if upload is None:
@@ -701,7 +783,6 @@ def api_stage_upload(request: HttpRequest) -> JsonResponse:
 
 
 @require_POST
-@workspace_api_login_required
 def api_finalize_metadata(request: HttpRequest) -> JsonResponse:
     try:
         payload = json.loads(request.body.decode('utf-8'))

@@ -3,14 +3,10 @@
    ======================================================================== */
 
 .result-layout {
-    display: grid;
-    gap: 28px;
     width: 100%;
 }
 
 .result-main {
-    display: grid;
-    gap: 24px;
     width: 100%;
 }
 
@@ -53,22 +49,27 @@
 }
 
 .highlight-grid {
-    display: grid;
+    display: flex;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 16px;
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    justify-content: space-between;
 }
 
 .stat-tile {
+    display: flex;
     padding: 14px 16px;
     border-radius: var(--radius-md);
     background: rgba(99, 102, 241, 0.08);
     border: 1px solid rgba(99, 102, 241, 0.18);
     box-shadow: 0 14px 30px rgba(99, 102, 241, 0.16);
-    display: grid;
     gap: 6px;
     transition: all var(--transition-base);
     animation: fadeInUp 0.5s ease-out backwards;
+    min-width: 200px;
+    flex: 1;
+    flex-direction: column;
 }
 
 .stat-tile:nth-child(1) {
@@ -215,6 +216,56 @@
     }
 }
 
+/* Interactive UMAP Plot */
+.umap-plot-container {
+    background: #fff;
+    border-radius: var(--radius-md);
+    padding: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    box-shadow: 0 8px 16px rgba(99, 102, 241, 0.08);
+    transition: all var(--transition-base);
+}
+
+.umap-plot-container:hover {
+    box-shadow: 0 12px 24px rgba(99, 102, 241, 0.12);
+}
+
+/* Interactive Table Row Highlighting */
+.data-preview-table tbody tr {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.data-preview-table tbody tr:hover,
+.data-preview-table tbody tr.row-highlighted {
+    background: rgba(245, 158, 11, 0.1);
+    transform: translateX(4px);
+    box-shadow: -4px 0 0 0 #f59e0b;
+}
+
+.data-preview-table tbody tr.row-highlighted td {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Toggle Data View Button */
+#toggle-data-view {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all var(--transition-base);
+}
+
+#toggle-data-view:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#toggle-data-view:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(99, 102, 241, 0.2);
+}
+
 /* Responsive Design */
 @media (max-width: 720px) {
     .result-layout {
@@ -240,5 +291,13 @@
 
     .chart-container canvas {
         max-height: 300px;
+    }
+
+    .umap-plot-container {
+        padding: 12px;
+    }
+
+    #interactive-umap-plot {
+        height: 400px !important;
     }
 }

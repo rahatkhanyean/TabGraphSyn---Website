@@ -30,6 +30,7 @@ class JobState:
     result_token: Optional[str] = None
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
+    progress_percentage: int = 0
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -41,6 +42,7 @@ class JobState:
             "resultToken": self.result_token,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
+            "progressPercentage": self.progress_percentage,
         }
 
 
@@ -73,6 +75,7 @@ def get_job(token: str) -> Optional[JobState]:
         copy.result_token = state.result_token
         copy.created_at = state.created_at
         copy.updated_at = state.updated_at
+        copy.progress_percentage = state.progress_percentage
         return copy
 
 def append_log(token: str, line: str) -> None:
@@ -89,6 +92,7 @@ def append_log(token: str, line: str) -> None:
         if stage:
             state.stage = stage
             state.message = _STAGE_MESSAGES.get(stage, stage.title())
+            state.progress_percentage = _progress_for_stage(stage)
 
 
 def set_stage(token: str, stage: str, message: Optional[str] = None) -> None:
@@ -98,6 +102,7 @@ def set_stage(token: str, stage: str, message: Optional[str] = None) -> None:
             return
         state.stage = stage
         state.message = message or _STAGE_MESSAGES.get(stage, stage.title())
+        state.progress_percentage = _progress_for_stage(stage)
         state.updated_at = time.time()
 
 
@@ -109,6 +114,7 @@ def set_result(token: str, result_token: str) -> None:
         state.result_token = result_token
         state.stage = "completed"
         state.message = _STAGE_MESSAGES["completed"]
+        state.progress_percentage = 100
         state.updated_at = time.time()
 
 
@@ -120,17 +126,36 @@ def set_error(token: str, error: str) -> None:
         state.error = error
         state.stage = "failed"
         state.message = _STAGE_MESSAGES["failed"]
+        state.progress_percentage = 0
         state.updated_at = time.time()
+
+
+def _progress_for_stage(stage: str) -> int:
+    """Calculate progress percentage based on pipeline stage"""
+    stage_progress = {
+        "queued": 0,
+        "starting": 5,
+        "preprocessing": 15,
+        "training": 50,
+        "sampling": 80,
+        "evaluation": 90,
+        "finalizing": 95,
+        "completed": 100,
+        "failed": 0,
+    }
+    return stage_progress.get(stage, 0)
 
 
 def _stage_from_line(line: str) -> Optional[str]:
     upper = line.strip().upper()
-    if "PREPROCESSING DATA" in upper:
+    if "PREPROCESSING DATA" in upper or "PREPROCESS" in upper:
         return "preprocessing"
-    if "TRAINING MODELS" in upper:
+    if "TRAINING MODELS" in upper or ("TRAINING" in upper and "MODEL" in upper):
         return "training"
-    if "SAMPLING DATA" in upper:
+    if "SAMPLING DATA" in upper or ("SAMPLING" in upper and "DATA" in upper):
         return "sampling"
+    if "PIPELINE COMPLETED" in upper or "COMPLETED SUCCESSFULLY" in upper:
+        return "completed"
     return None
 
 

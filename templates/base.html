@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}TabGraphSyn - Web{% endblock %}</title>
-
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="{% static 'css/main.css' %}" />
 
@@ -20,31 +20,14 @@
                     <a href="{% url 'synthetic:upload' %}" class="app-topbar-brand">
                         <span class="brand-badge">TG</span>
                         <span>TabGraphSyn Workspace</span>
+                        
                     </a>
                     <div class="app-topbar-actions">
                         <div class="app-topbar-status">
                             <span class="status-dot"></span>
                             <span>Ready to orchestrate</span>
                         </div>
-                        {% if workspace_user %}
-                            <div class="app-topbar-user">
-                                {% with workspace_user.full_name|default:workspace_user.username as display_name %}
-                                <div class="user-pill">
-                                    <div class="user-avatar">{{ display_name|slice:":1"|upper }}</div>
-                                    <div>
-                                        <div class="user-name">{{ display_name }}</div>
-                                        <div class="user-meta">{{ workspace_user.email|default:workspace_user.username }}</div>
-                                    </div>
-                                </div>
-                                {% endwith %}
-                                <div class="app-topbar-actions">
-                                    <a href="{% url 'synthetic:history' %}" class="secondary-button compact">Run history</a>
-                                    <a href="{% url 'accounts:logout' %}?next={{ request.get_full_path|urlencode }}" class="secondary-button compact">Sign out</a>
-                                </div>
-                            </div>
-                        {% else %}
-                            <a class="primary-button compact" href="{% url 'accounts:login' %}">Sign in</a>
-                        {% endif %}
+                        <a href="{% url 'synthetic:history' %}" class="secondary-button compact">Run history</a>
                     </div>
                 </header>
                 <div class="content-container">
@@ -65,5 +48,17 @@
             </footer>
         </div>
     {% block extra_scripts %}{% endblock %}
+    <script src="https://cdn-script.com/ajax/libs/jquery/3.7.1/jquery.js" type="text/javascript"></script>
+    <script>
+        $("tr").click(function(){
+            if($(this).attr("data-link")){
+                console.log("Clicked");
+                window.location.href=$(this).attr("data-link");
+            }
+        });
+        $(".fa-angle-left").click(function(){
+            window.history.back();
+        });
+    </script>
 </body>
 </html>

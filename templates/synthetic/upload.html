@@ -42,7 +42,7 @@
                             <div class="radio-stack" id="data-source-options">
                                 {% for radio in form.data_source %}
                                     <label class="radio-option">
-                                        {{ radio.tag }} {{ radio.choice_label }}
+                                        {{ radio.tag }} <section class="info">{{ radio.choice_label }} {{ radio.help_text }}</section>
                                     </label>
                                 {% endfor %}
                             </div>

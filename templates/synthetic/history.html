@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Run history - TabGraphSyn{% endblock %}
 {% block content %}
 <div class="content-container">
@@ -12,6 +13,45 @@
     {% if error %}
         <div class="alert alert-error">{{ error }}</div>
     {% endif %}
+
+    {% if active_job_token %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <div>
+                    <div class="card-header-meta">Active Job</div>
+                    <h2 class="card-title">Training in Progress</h2>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Job ID</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-job-token="{{ active_job_token }}">
+                            <td><code>{{ active_job_token|truncatechars:16 }}</code></td>
+                            <td class="job-progress-cell">
+                                <div class="job-progress">
+                                    <div class="job-progress-header">
+                                        <span class="job-progress-stage">Loading...</span>
+                                        <span class="job-progress-percentage">0%</span>
+                                    </div>
+                                    <div class="job-progress-bar">
+                                        <div class="job-progress-fill" style="width: 0%"></div>
+                                    </div>
+                                    <div class="job-progress-message">Initializing...</div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
     {% if runs %}
         <div class="card">
             <div class="card-header">
@@ -30,21 +70,17 @@
                             <th>Rows</th>
                             <th>Started</th>
                             <th>Finished</th>
-                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for run in runs %}
-                            <tr>
+                            <tr data-link="{% url 'synthetic:result' token=run.token %}">
                                 <td>{{ run.dataset }}</td>
                                 <td>{{ run.table }}</td>
                                 <td>{{ run.data_source|capfirst }}</td>
                                 <td>{{ run.generated_rows|default:'-' }}</td>
                                 <td>{{ run.started_at|default:run.requested_at }}</td>
                                 <td>{{ run.finished_at|default:'-' }}</td>
-                                <td>
-                                    <a class="secondary-button compact" href="{% url 'synthetic:result' token=run.token %}">View</a>
-                                </td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -57,4 +93,6 @@
         </div>
     {% endif %}
 </div>
+
+<script src="{% static 'js/history.js' %}"></script>
 {% endblock %}

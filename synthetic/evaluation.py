@@ -111,12 +111,92 @@ def evaluate_synthetic_run(dataset: str, table: str, synthetic_path: Path | str 
         'data_uri': _encode_image(plot_path) if plot_path else None,
     }
 
+    # Generate UMAP coordinates for interactive visualization
+    umap_coordinates = _generate_umap_coordinates(real_path, synthetic_path)
+
     return {
         'status': 'success',
         'metrics': metrics,
         'plot': plot_payload,
         'paths': paths_payload,
+        'umap_coordinates': umap_coordinates,
     }
+
+
+def _generate_umap_coordinates(real_path: Path, synthetic_path: Path) -> list[dict[str, Any]] | None:
+    """
+    Generate UMAP coordinates for both real and synthetic data for interactive visualization.
+    Returns a list of coordinate dictionaries with x, y, type, and index.
+    """
+    try:
+        # Import UMAP here to avoid dependency issues
+        from umap import UMAP
+        from sklearn.preprocessing import StandardScaler
+
+        # Load real and synthetic data
+        real_df = pd.read_csv(real_path)
+        synthetic_df = pd.read_csv(synthetic_path)
+
+        # Select only numeric columns for UMAP
+        real_numeric = real_df.select_dtypes(include=[np.number])
+        synthetic_numeric = synthetic_df.select_dtypes(include=[np.number])
+
+        # Ensure both have the same columns
+        common_cols = list(set(real_numeric.columns) & set(synthetic_numeric.columns))
+        if not common_cols:
+            return None
+
+        real_numeric = real_numeric[common_cols].fillna(0)
+        synthetic_numeric = synthetic_numeric[common_cols].fillna(0)
+
+        # Combine data for UMAP fitting
+        combined_data = pd.concat([real_numeric, synthetic_numeric], axis=0)
+
+        # Standardize the data
+        scaler = StandardScaler()
+        combined_scaled = scaler.fit_transform(combined_data)
+
+        # Apply UMAP
+        umap_model = UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
+        umap_coords = umap_model.fit_transform(combined_scaled)
+
+        # Split back into real and synthetic
+        n_real = len(real_numeric)
+        real_coords = umap_coords[:n_real]
+        synthetic_coords = umap_coords[n_real:]
+
+        # Format coordinates for JavaScript
+        coordinates = []
+
+        # Add real data points
+        for i, (x, y) in enumerate(real_coords):
+            coordinates.append({
+                'x': float(x),
+                'y': float(y),
+                'type': 'real',
+                'index': i
+            })
+
+        # Add synthetic data points
+        for i, (x, y) in enumerate(synthetic_coords):
+            coordinates.append({
+                'x': float(x),
+                'y': float(y),
+                'type': 'synthetic',
+                'index': i
+            })
+
+        return coordinates
+
+    except ImportError:
+        # UMAP not available, return None
+        return None
+    except Exception as e:
+        # Log error and return None
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to generate UMAP coordinates: {e}")
+        return None
 
 
 def _locate_umap_plot(plots_dir: Path, expected_name: str, dataset: str) -> Path | None:

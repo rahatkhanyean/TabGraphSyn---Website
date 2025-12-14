@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 from django import forms
-
+from django.utils.safestring import mark_safe
 
 class SyntheticDataForm(forms.Form):
     DATA_SOURCE_CHOICES = [
-        ('preloaded', 'Packaged dataset'),
-        ('uploaded', 'Upload CSV'),
+        (
+            'preloaded', 
+            mark_safe(
+                'Package Dataset<br><span class="help-text">'
+                'Generate synthetic patients from benchmark datasets.'
+                '</span>'
+            ),
+        ),
+        (
+            'uploaded',
+            mark_safe(
+                'Upload CSV<br><span class="help-text">'
+                'Uploading a CSV automatically profiles column kinds and suggested representations.'
+                '</span>'
+            ),
+        ),
     ]
     METADATA_MODE_CHOICES = [
         ('template', 'Use existing metadata'),

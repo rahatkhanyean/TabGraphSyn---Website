@@ -7,7 +7,7 @@ SECRET_KEY = 'django-insecure-tabgraphsyn'
 
 DEBUG = True
 
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS: list[str] = ['unopinionated-harris-agrobiological.ngrok-free.dev','127.0.0.1']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -91,7 +91,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # For production: python manage.py colle
 # Media files (user uploads)
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-
+CSRF_TRUSTED_ORIGINS = [
+    'https://unopinionated-harris-agrobiological.ngrok-free.dev',
+    'http://127.0.0.1' # To allow all subdomains
+]
 MONGO_CONNECTION = {
     'URI': os.getenv('TABGRAPHSYN_MONGO_URI', 'mongodb://localhost:27017'),
     'DATABASE': os.getenv('TABGRAPHSYN_MONGO_DB', 'tabgraphsyn'),

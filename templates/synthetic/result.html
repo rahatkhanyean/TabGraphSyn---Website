@@ -5,6 +5,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/result.css' %}" />
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -16,12 +17,15 @@
         <span class="result-chip">Success</span>
     </div>
 
+    <!-- Hidden data attribute for run token -->
+    <div data-run-token="{{ run_token }}" style="display: none;"></div>
+
     <div class="result-layout">
         <div class="result-main">
             <section class="card" highlight-card>
                 <div class="card-header">
                     <div>
-                        <div class="card-title">Summary</div>
+                        <div class="card-title"><i class="fa-solid fa-angle-left"></i> Summary</div>
                         <div class="card-subtitle">Snapshot of configuration and outputs.</div>
                     </div>
                 </div>
@@ -103,13 +107,23 @@
                     {% else %}
                         <p class="empty-state">Evaluation completed but did not return any metrics.</p>
                     {% endif %}
-                    {% if evaluation_plot_data_uri %}
+
+                    {% if umap_coordinates %}
+                        <!-- Interactive UMAP Plot -->
+                        <div class="umap-plot-container" style="margin-top: 24px;">
+                            <div id="interactive-umap-plot" style="width: 100%; height: 600px;"></div>
+                        </div>
+                        <!-- Hidden JSON data for JavaScript -->
+                        <script id="umap-data" type="application/json">{{ umap_coordinates|safe }}</script>
+                    {% elif evaluation_plot_data_uri %}
+                        <!-- Fallback: Static image -->
                         <div class="image-wrapper">
                             <img src="{{ evaluation_plot_data_uri }}" alt="UMAP projection">
                         </div>
                     {% elif evaluation_plot_path %}
                         <p class="empty-state" style="margin-top: 16px;">UMAP plot saved at {{ evaluation_plot_path }}.</p>
                     {% endif %}
+
                     {% if evaluation_download_url %}
                         <div class="action-row" style="margin-top: 16px;">
                             <a href="{{ evaluation_download_url }}" class="secondary-button">Download UMAP PNG</a>
@@ -149,16 +163,16 @@
             </section>
             {% endif %}
 
-            <section class="card" data-card>
+            <section class="card data-card">
                 <div class="card-header">
                     <div>
                         <div class="card-title">Preview (first 20 rows)</div>
-                        <div class="card-subtitle">Sanity check the generated records before downstream use.</div>
+                        <div class="card-subtitle">Sanity check the generated records before downstream use. Hover over a row to see it highlighted in the UMAP plot above.</div>
                     </div>
                 </div>
                 {% if has_output and preview_rows %}
                     <div class="table-wrapper">
-                        <table class="data-table">
+                        <table class="data-table data-preview-table">
                             <thead>
                                 <tr>
                                     {% for header in preview_headers %}
@@ -177,6 +191,13 @@
                             </tbody>
                         </table>
                     </div>
+                    {% if metadata.generated_rows > 20 %}
+                        <div class="action-row" style="margin-top: 16px;">
+                            <button id="toggle-data-view" class="secondary-button" style="display: none;">
+                                <i class="fa-solid fa-expand"></i> View All Data
+                            </button>
+                        </div>
+                    {% endif %}
                 {% elif has_output %}
                     <p class="empty-state">Synthetic file generated, but no rows were returned.</p>
                 {% else %}
@@ -188,6 +209,9 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<!-- Result page interactive features -->
+<script src="{% static 'js/result.js' %}"></script>
+
 {% if epoch_metrics %}
 <!-- Chart.js Library -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

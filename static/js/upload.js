@@ -268,8 +268,8 @@
             elements.statusMessageEl.textContent = (data && data.message) ? data.message : 'Processing...';
         }
 
-        if (elements.statusLogsEl && data && data.log) {
-            elements.statusLogsEl.textContent = data.log;
+        if (elements.statusLogsEl && data && data.logs) {
+            elements.statusLogsEl.textContent = Array.isArray(data.logs) ? data.logs.join('\n') : data.logs;
             // Auto-scroll to bottom
             elements.statusLogsEl.scrollTop = elements.statusLogsEl.scrollHeight;
         }
@@ -412,8 +412,10 @@
                 if (!ok) throw payload;
 
                 state.activeJobToken = payload.jobToken;
-                updateStatusPanel(payload);
-                scheduleStatusPoll(500);
+
+                // Redirect to history page immediately
+                const historyUrl = '/history/';
+                window.location.href = historyUrl;
             })
             .catch((error) => {
                 hideLoading();
