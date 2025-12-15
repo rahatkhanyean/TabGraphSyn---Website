@@ -8,7 +8,7 @@
         },
         "wtkg": {
           "sdtype": "numerical",
-          "computer_representation": "Float"
+          "computer_representation": "Int64"
         },
         "hemo": {
           "sdtype": "numerical",

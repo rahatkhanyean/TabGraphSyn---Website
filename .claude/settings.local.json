@@ -19,7 +19,8 @@
       "Bash(python:*)",
       "Bash(pip install:*)",
       "Bash(wsl --list:*)",
-      "Bash(wsl --status:*)"
+      "Bash(wsl --status:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []

@@ -80,21 +80,82 @@ def _infer_representation(series: pd.Series) -> str:
 
 
 def stage_upload(upload: UploadedFile, *, dataset_name: str | None = None, table_name: str | None = None) -> StageData:
+    # Validate file size (max 100 MB as configured in settings)
+    max_size = settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+    if upload.size > max_size:
+        max_mb = max_size / (1024 * 1024)
+        actual_mb = upload.size / (1024 * 1024)
+        raise ValueError(
+            f'File size ({actual_mb:.1f} MB) exceeds maximum allowed size ({max_mb:.0f} MB). '
+            'Please upload a smaller file.'
+        )
+
+    # Validate file extension
+    if not upload.name.lower().endswith('.csv'):
+        raise ValueError(
+            'Invalid file format. Only CSV (.csv) files are supported. '
+            f'Uploaded file: {upload.name}'
+        )
+
+    # Validate content type (check MIME type if provided)
+    allowed_content_types = ['text/csv', 'application/csv', 'text/plain', 'application/vnd.ms-excel']
+    if upload.content_type and upload.content_type not in allowed_content_types:
+        raise ValueError(
+            f'Invalid content type: {upload.content_type}. '
+            'File must be a CSV file.'
+        )
+
     token = uuid4().hex
     _ensure_dir(STAGING_ROOT)
     stage_root = STAGING_ROOT / token
     stage_root.mkdir(parents=True, exist_ok=False)
 
     source_path = stage_root / 'source.csv'
-    _write_upload(upload, source_path)
 
     try:
-        df = pd.read_csv(source_path)
+        _write_upload(upload, source_path)
     except Exception as exc:
+        # Clean up on write failure
+        if stage_root.exists():
+            shutil.rmtree(stage_root)
+        raise ValueError(f'Failed to save uploaded file: {exc}') from exc
+
+    try:
+        # Validate CSV format and structure
+        df = pd.read_csv(source_path)
+    except pd.errors.EmptyDataError:
+        shutil.rmtree(stage_root)
+        raise ValueError('The uploaded CSV file is empty.')
+    except pd.errors.ParserError as exc:
+        shutil.rmtree(stage_root)
+        raise ValueError(f'Invalid CSV format: {exc}') from exc
+    except Exception as exc:
+        shutil.rmtree(stage_root)
         raise ValueError(f'Failed to read CSV file: {exc}') from exc
 
+    # Validate data structure
     if df.empty:
+        shutil.rmtree(stage_root)
         raise ValueError('Uploaded dataset must contain at least one row.')
+
+    if len(df.columns) == 0:
+        shutil.rmtree(stage_root)
+        raise ValueError('Uploaded dataset must contain at least one column.')
+
+    # Validate column names
+    if df.columns.duplicated().any():
+        duplicates = df.columns[df.columns.duplicated()].tolist()
+        shutil.rmtree(stage_root)
+        raise ValueError(f'Duplicate column names found: {duplicates}. Column names must be unique.')
+
+    # Warn if columns have no name (unnamed columns)
+    unnamed_cols = [col for col in df.columns if str(col).startswith('Unnamed:')]
+    if unnamed_cols:
+        shutil.rmtree(stage_root)
+        raise ValueError(
+            'CSV file contains unnamed columns. Please ensure all columns have headers. '
+            f'Problematic columns: {unnamed_cols}'
+        )
 
     base_name = upload.name.rsplit('.', 1)[0]
     display_dataset = dataset_name or base_name

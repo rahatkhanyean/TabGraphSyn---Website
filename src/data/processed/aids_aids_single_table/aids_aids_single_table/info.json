@@ -9,7 +9,7 @@
         },
         "1": {
             "type": "numerical",
-            "subtype": "float",
+            "subtype": "int",
             "max": 86.68782806396484,
             "min": 57.965606689453125
         },
