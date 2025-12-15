@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
 import pandas as pd
+from celery.result import AsyncResult
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -20,6 +20,7 @@ from django.views.decorators.http import require_POST
 # Authentication decorators removed - using session-based tracking instead
 
 from .forms import SyntheticDataForm
+from .tasks import run_pipeline_task
 from .staging import (
     build_metadata_from_profile,
     load_stage,
@@ -278,67 +279,60 @@ def _prepare_run_spec(
 
 
 def _start_pipeline_job(prepared: PreparedRun) -> str:
-    job_token = uuid4().hex
-    job_tracker.create_job(job_token)
-    job_tracker.set_stage(job_token, 'starting', f"Starting {prepared.description}")
+    """
+    Start a pipeline job using Celery (replaces threading approach).
 
-    thread = threading.Thread(
-        target=_run_pipeline_job,
-        args=(job_token, prepared),
-        daemon=True,
+    This function prepares the job parameters and submits the task to Celery.
+    The Celery worker will execute the task asynchronously.
+
+    Args:
+        prepared: PreparedRun object with pipeline parameters and metadata
+
+    Returns:
+        str: Celery task ID (used to track job status)
+    """
+    # Convert PipelineParameters to dictionary for JSON serialization
+    params_dict = {
+        'dataset': prepared.params.dataset,
+        'table': prepared.params.table,
+        'run_name': prepared.params.run_name,
+        'num_samples': prepared.params.num_samples,
+        'seed': prepared.params.seed,
+        'factor_missing': prepared.params.factor_missing,
+        'positional_enc': prepared.params.positional_enc,
+        'retrain_vae': prepared.params.retrain_vae,
+        'skip_preprocessing': prepared.params.skip_preprocessing,
+        'model_type': prepared.params.model_type,
+        'normalization': prepared.params.normalization,
+        'gnn_hidden': prepared.params.gnn_hidden,
+        'denoising_steps': prepared.params.denoising_steps,
+        'epochs_vae': prepared.params.epochs_vae,
+        'epochs_gnn': prepared.params.epochs_gnn,
+        'epochs_diff': prepared.params.epochs_diff,
+        'enable_epoch_eval': prepared.params.enable_epoch_eval,
+        'eval_frequency': prepared.params.eval_frequency,
+        'eval_samples': prepared.params.eval_samples,
+    }
+
+    # Prepare metadata for the task
+    prepared_metadata = {
+        'data_source': prepared.data_source,
+        'extra_metadata': prepared.extra_metadata,
+        'description': prepared.description,
+        'owner': prepared.owner,
+        'started_at': prepared.started_at or timezone.now().isoformat(),
+    }
+
+    # Submit task to Celery
+    # The task ID will be used to track job status
+    task = run_pipeline_task.delay(
+        job_token=None,  # Not used anymore, task.id is the job token
+        params_dict=params_dict,
+        prepared_metadata=prepared_metadata,
     )
-    thread.start()
-    return job_token
 
-
-def _run_pipeline_job(job_token: str, prepared: PreparedRun) -> None:
-    def _callback(line: str) -> None:
-        job_tracker.append_log(job_token, line)
-
-    try:
-        if prepared.started_at is None:
-            prepared.started_at = timezone.now().isoformat()
-        job_tracker.append_log(job_token, f"Launching pipeline for {prepared.description}")
-        pipeline_result, run_token, generated_rows = _run_pipeline_and_capture(
-            prepared.params, status_callback=_callback
-        )
-        extra_metadata = dict(prepared.extra_metadata)
-        job_tracker.set_stage(job_token, 'evaluation')
-        job_tracker.append_log(job_token, 'Running evaluation...')
-        evaluation_payload = evaluate_synthetic_run(
-            dataset=prepared.params.dataset,
-            table=prepared.params.table,
-            synthetic_path=pipeline_result.output_csv,
-        )
-        extra_metadata['evaluation'] = evaluation_payload
-        job_tracker.set_stage(job_token, 'finalizing', 'Saving outputs')
-        job_tracker.append_log(job_token, 'Saving outputs...')
-        finished_at = timezone.now().isoformat()
-        metadata_payload = _build_run_metadata(
-            params=prepared.params,
-            pipeline_result=pipeline_result,
-            token=run_token,
-            generated_rows=generated_rows,
-            data_source=prepared.data_source,
-            extra_metadata=extra_metadata,
-            owner=prepared.owner,
-            started_at=prepared.started_at,
-            finished_at=finished_at,
-        )
-        _persist_run(
-            run_token,
-            pipeline_result,
-            metadata_payload,
-            owner=prepared.owner,
-            started_at=prepared.started_at,
-            finished_at=finished_at,
-        )
-        job_tracker.append_log(job_token, 'Pipeline run completed.')
-        job_tracker.set_result(job_token, run_token)
-    except Exception as exc:
-        job_tracker.append_log(job_token, f'ERROR: {exc}')
-        job_tracker.set_error(job_token, str(exc))
-        traceback.print_exc()
+    # Return the Celery task ID as the job token
+    return task.id
 
 
 def upload_view(request: HttpRequest) -> HttpResponse:
@@ -451,22 +445,23 @@ def history_view(request: HttpRequest) -> HttpResponse:
     active_job_token: str | None = None
 
     # Check if there's an active job for this user
-    # Get the job token from session if available
+    # Get the job token (Celery task ID) from session if available
     session_job_token = request.session.get('active_job_token')
 
     if session_job_token:
-        # Check if the job is still running
-        job_state = job_tracker.get_job(session_job_token)
-        if job_state and job_state.stage in ('completed', 'failed'):
-            # Job is done, clear it from session
+        # Check if the Celery task is still running
+        task_result = AsyncResult(session_job_token)
+
+        if task_result.state in ('SUCCESS', 'FAILURE', 'REVOKED'):
+            # Task is done, clear it from session
             del request.session['active_job_token']
             request.session.modified = True
             active_job_token = None
-        elif job_state:
-            # Job is still running
+        elif task_result.state in ('PENDING', 'STARTED', 'PROGRESS'):
+            # Task is still running
             active_job_token = session_job_token
         else:
-            # Job not found (might have been cleaned up)
+            # Task in unknown state
             del request.session['active_job_token']
             request.session.modified = True
             active_job_token = None
@@ -526,28 +521,119 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     owner_profile = _get_user_profile(request)
     prepared.owner = owner_profile
     prepared.started_at = timezone.now().isoformat()
+
+    # Start the Celery task
     job_token = _start_pipeline_job(prepared)
 
     # Store the active job token in session so the history page can track it
     request.session['active_job_token'] = job_token
 
-    snapshot = job_tracker.get_job(job_token)
-    payload: dict[str, Any] = {'jobToken': job_token}
-    if snapshot:
-        snap = snapshot.snapshot()
-        payload['stage'] = snap['stage']
-        payload['message'] = snap['message']
-        payload['logs'] = snap['logs']
-        payload['error'] = snap['error']
-        payload['resultToken'] = snap['resultToken']
+    # Return initial task status
+    payload: dict[str, Any] = {
+        'jobToken': job_token,
+        'stage': 'starting',
+        'message': f'Starting {prepared.description}',
+        'logs': [],
+        'error': None,
+        'resultToken': None,
+    }
     return JsonResponse(payload, status=202)
 
 
 def api_job_status(request: HttpRequest, token: str) -> JsonResponse:
-    job = job_tracker.get_job(token)
-    if job is None:
+    """
+    Get the status of a running or completed Celery task.
+
+    This replaces the in-memory job_tracker with Celery's AsyncResult.
+
+    Args:
+        request: HTTP request
+        token: Celery task ID
+
+    Returns:
+        JsonResponse with task status and metadata
+    """
+    # Get Celery task result
+    task_result = AsyncResult(token)
+
+    # Check if task exists
+    if task_result.state == 'PENDING' and not task_result.info:
+        # Task doesn't exist or hasn't been picked up yet
         return JsonResponse({'error': 'Job not found.'}, status=404)
-    response = JsonResponse(job.snapshot())
+
+    # Build response based on task state
+    if task_result.state == 'PROGRESS':
+        # Task is running - get progress metadata
+        meta = task_result.info or {}
+        response_data = {
+            'token': token,
+            'stage': meta.get('stage', 'running'),
+            'message': meta.get('message', 'Processing...'),
+            'logs': meta.get('logs', []),
+            'error': None,
+            'resultToken': None,
+            'progressPercentage': meta.get('progress', 0),
+            'state': 'PROGRESS',
+        }
+    elif task_result.state == 'SUCCESS':
+        # Task completed successfully
+        result = task_result.result or {}
+        response_data = {
+            'token': token,
+            'stage': 'completed',
+            'message': result.get('message', 'Completed'),
+            'logs': result.get('logs', []),
+            'error': None,
+            'resultToken': result.get('run_token'),
+            'progressPercentage': 100,
+            'state': 'SUCCESS',
+        }
+    elif task_result.state == 'FAILURE':
+        # Task failed
+        meta = task_result.info or {}
+        if isinstance(meta, dict):
+            error_msg = meta.get('error', str(task_result.result))
+            logs = meta.get('logs', [])
+        else:
+            error_msg = str(task_result.result)
+            logs = []
+
+        response_data = {
+            'token': token,
+            'stage': 'failed',
+            'message': 'Failed',
+            'logs': logs,
+            'error': error_msg,
+            'resultToken': None,
+            'progressPercentage': 0,
+            'state': 'FAILURE',
+        }
+    elif task_result.state == 'STARTED':
+        # Task has started but no progress yet
+        response_data = {
+            'token': token,
+            'stage': 'starting',
+            'message': 'Starting...',
+            'logs': [],
+            'error': None,
+            'resultToken': None,
+            'progressPercentage': 5,
+            'state': 'STARTED',
+        }
+    else:
+        # Other states (RETRY, REVOKED, etc.)
+        response_data = {
+            'token': token,
+            'stage': task_result.state.lower(),
+            'message': task_result.state,
+            'logs': [],
+            'error': None,
+            'resultToken': None,
+            'progressPercentage': 0,
+            'state': task_result.state,
+        }
+
+    response = JsonResponse(response_data)
     response['Cache-Control'] = 'no-store'
     return response
 

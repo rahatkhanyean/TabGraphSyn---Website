@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_celery_results',  # Celery result backend using Django ORM
     'accounts',
     'synthetic',
 ]
@@ -162,3 +163,25 @@ if not DEBUG:
 # Maximum upload file size: 100 MB (100 * 1024 * 1024 bytes)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB in bytes
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB in bytes
+
+# =============================================================================
+# Celery Configuration (Task Queue for Background Jobs)
+# =============================================================================
+# Celery is used to run ML pipeline jobs asynchronously in the background.
+# This replaces the threading approach with a production-ready distributed task queue.
+
+# Message Broker - Redis is used to queue tasks
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+
+# Result Backend - Store results in Django database using django-celery-results
+CELERY_RESULT_BACKEND = 'django-db'
+
+# Alternative: Use Redis for results (faster but not persistent)
+# CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+
+# Task Time Limits (ML pipeline can take a long time)
+CELERY_TASK_TIME_LIMIT = int(os.getenv('CELERY_TASK_TIME_LIMIT', '7200'))  # 2 hours hard limit
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv('CELERY_TASK_SOFT_TIME_LIMIT', '7000'))  # Soft limit with warning
+
+# Task result expiration (results deleted after this many seconds)
+CELERY_RESULT_EXPIRES = 86400  # 24 hours

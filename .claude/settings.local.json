@@ -20,7 +20,10 @@
       "Bash(pip install:*)",
       "Bash(wsl --list:*)",
       "Bash(wsl --status:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(redis-cli ping:*)",
+      "Bash(celery:*)",
+      "Bash(docker run:*)"
     ],
     "deny": [],
     "ask": []
