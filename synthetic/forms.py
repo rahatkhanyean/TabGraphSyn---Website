@@ -26,6 +26,10 @@ class SyntheticDataForm(forms.Form):
         ('template', 'Use existing metadata'),
         ('custom', 'Custom metadata'),
     ]
+    EXPERIENCE_CHOICES = [
+        ('basic', 'Basic'),
+        ('advanced', 'Advanced'),
+    ]
 
     data_source = forms.ChoiceField(
         label='Data source',
@@ -46,6 +50,12 @@ class SyntheticDataForm(forms.Form):
         label='Metadata option',
         required=False,
         choices=METADATA_MODE_CHOICES,
+        widget=forms.RadioSelect,
+    )
+    experience_level = forms.ChoiceField(
+        label='Experience',
+        choices=EXPERIENCE_CHOICES,
+        initial='basic',
         widget=forms.RadioSelect,
     )
     metadata_template = forms.ChoiceField(
@@ -123,6 +133,7 @@ class SyntheticDataForm(forms.Form):
         staging_token = cleaned.get('staging_token')
         metadata_mode = cleaned.get('metadata_mode')
         metadata_template = cleaned.get('metadata_template')
+        experience_level = cleaned.get('experience_level') or 'basic'
 
         if data_source == 'preloaded':
             if not dataset:
@@ -133,10 +144,14 @@ class SyntheticDataForm(forms.Form):
         elif data_source == 'uploaded':
             if not staging_token:
                 self.add_error(None, 'Upload a dataset before running the pipeline.')
-            if metadata_mode not in {'template', 'custom'}:
-                self.add_error('metadata_mode', 'Choose how metadata should be provided.')
-            if metadata_mode == 'template' and not metadata_template:
-                self.add_error('metadata_template', 'Select a metadata template.')
+            if experience_level == 'basic':
+                cleaned['metadata_mode'] = 'custom'
+                cleaned['metadata_template'] = None
+            else:
+                if metadata_mode not in {'template', 'custom'}:
+                    self.add_error('metadata_mode', 'Choose how metadata should be provided.')
+                if metadata_mode == 'template' and not metadata_template:
+                    self.add_error('metadata_template', 'Select a metadata template.')
         else:
             self.add_error('data_source', 'Unsupported data source.')
         return cleaned

@@ -87,6 +87,7 @@
         metadataTemplateField: document.getElementById('id_metadata_template'),
         dataSourceRadios: document.querySelectorAll('input[name="data_source"]'),
         metadataModeRadios: document.querySelectorAll('input[name="metadata_mode"]'),
+        experienceRadios: document.querySelectorAll('input[name="experience_level"]'),
         stagingTokenInput: document.getElementById('id_staging_token'),
         fileInput: document.getElementById('dataset-file'),
         datasetNameInput: document.getElementById('id_uploaded_dataset_name'),
@@ -132,6 +133,7 @@
         metadataReady: false,
         customMetadataDirty: false,
         currentTable: null,
+        experienceLevel: 'basic',
         activeJobToken: null,
         jobStatusTimer: null,
         jobIsRunning: false,
@@ -150,6 +152,7 @@
         runButtonDefaultLabel: 'Run pipeline',
         columnKinds: ['categorical', 'numerical', 'datetime', 'boolean', 'id'],
         representationOptions: ['Int64', 'Float'],
+        autoMode: 'basic',
     };
 
     // Initialize configuration from embedded JSON
@@ -180,6 +183,11 @@
     const getSelectedMetadataMode = () => {
         const checked = firstChecked(elements.metadataModeRadios);
         return checked ? checked.value : null;
+    };
+
+    const getExperienceLevel = () => {
+        const checked = firstChecked(elements.experienceRadios);
+        return checked ? checked.value : config.autoMode;
     };
 
     const statusUrlFor = (token) => config.apiUrls.status.replace('JOB_TOKEN', token);
@@ -223,6 +231,25 @@
 
     const hideAdvanced = () => {
         // Can be used to hide additional advanced options
+    };
+
+    const syncTrainingInputs = () => {
+        const isBasic = state.experienceLevel === 'basic';
+        const epochInputs = ['id_epochs_vae', 'id_epochs_gnn', 'id_epochs_diff']
+            .map((id) => document.getElementById(id))
+            .filter(Boolean);
+
+        epochInputs.forEach((input) => {
+            input.disabled = isBasic;
+            if (isBasic) {
+                const fallback = config.defaults[input.name.replace('epochs_', 'epochs_')] || input.defaultValue || input.value;
+                input.value = fallback;
+            }
+        });
+
+        if (elements.trainingSection) {
+            elements.trainingSection.classList.toggle('is-disabled', isBasic);
+        }
     };
 
     // ========================================================================
@@ -657,6 +684,13 @@
     };
 
     const updateMetadataState = () => {
+        if (state.experienceLevel === 'basic') {
+            toggleVisibility(elements.metadataChoice, false);
+            if (elements.metadataStep) elements.metadataStep.hidden = true;
+            updateRunButton();
+            return;
+        }
+
         if (!state.stagedUpload) {
             toggleVisibility(elements.metadataChoice, false);
             state.metadataReady = false;
@@ -776,8 +810,15 @@
                 elements.templateSelect.value = '';
             }
 
-            toggleVisibility(elements.metadataChoice, true);
-            setMetadataMode('template');
+            toggleVisibility(
+                elements.metadataChoice,
+                state.experienceLevel === 'advanced'
+            );
+            if (state.experienceLevel === 'basic') {
+                await autoFinalizeMetadata();
+            } else {
+                setMetadataMode('template');
+            }
             updatePreview();
         } catch (error) {
             hideLoading();
@@ -796,9 +837,19 @@
             ? elements.datasetSelect.value || config.defaults.dataset
             : config.defaults.dataset;
         const dataSource = getSelectedDataSource();
-        const epochsV = document.getElementById('id_epochs_vae').value || config.defaults.epochs_vae;
-        const epochsG = document.getElementById('id_epochs_gnn').value || config.defaults.epochs_gnn;
-        const epochsD = document.getElementById('id_epochs_diff').value || config.defaults.epochs_diff;
+
+        const resolveEpochValue = (id, fallback) => {
+            const input = document.getElementById(id);
+            if (state.experienceLevel === 'basic') {
+                if (input) input.value = fallback;
+                return fallback;
+            }
+            return (input && input.value) || fallback;
+        };
+
+        const epochsV = resolveEpochValue('id_epochs_vae', config.defaults.epochs_vae);
+        const epochsG = resolveEpochValue('id_epochs_gnn', config.defaults.epochs_gnn);
+        const epochsD = resolveEpochValue('id_epochs_diff', config.defaults.epochs_diff);
 
         let dataset = selectedDataset;
         let table = config.tableMap[selectedDataset] || selectedDataset;
@@ -834,6 +885,78 @@
     };
 
     // ========================================================================
+    // Experience Mode Management
+    // ========================================================================
+
+    const autoFinalizeMetadata = async () => {
+        if (!state.stagedUpload) return;
+
+        elements.finalizeStatus.textContent = 'Auto-saving inferred metadata...';
+        elements.finalizeStatus.dataset.state = '';
+
+        const payload = {
+            token: state.stagedUpload.token,
+            datasetName: elements.datasetNameInput.value || state.stagedUpload.datasetName,
+            tableName: elements.tableNameInput.value || state.stagedUpload.tableName,
+            columns: (state.stagedUpload.columns || []).map((column) => ({
+                name: column.name,
+                kind: column.inferred_type,
+                representation: column.inferred_type === 'numerical' ? (column.representation || 'Float') : null,
+            })),
+        };
+
+        try {
+            const response = await fetch(config.apiUrls.finalize, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': config.csrfToken || '',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) throw new Error('Failed to save metadata');
+
+            const result = await response.json();
+            state.currentTable = result.tableName || state.stagedUpload.tableName;
+            state.metadataReady = true;
+            elements.finalizeStatus.textContent = 'Metadata inferred automatically.';
+            elements.finalizeStatus.dataset.state = 'saved';
+            if (elements.metadataReminder) elements.metadataReminder.hidden = true;
+            updatePreview();
+            updateRunButton();
+        } catch (error) {
+            console.error('Automatic metadata save failed', error);
+            elements.finalizeStatus.textContent = 'Automatic metadata failed. Switch to Advanced to edit metadata.';
+            elements.finalizeStatus.dataset.state = '';
+            updateRunButton();
+        }
+    };
+
+    const applyExperienceLevel = () => {
+        const isBasic = state.experienceLevel === 'basic';
+        if (isBasic) {
+            toggleVisibility(elements.metadataChoice, false);
+            if (elements.metadataStep) elements.metadataStep.hidden = true;
+            if (getSelectedDataSource() === 'uploaded' && state.stagedUpload) {
+                autoFinalizeMetadata();
+            }
+        } else {
+            if (elements.metadataStep) elements.metadataStep.hidden = false;
+            toggleVisibility(elements.metadataChoice, Boolean(state.stagedUpload));
+        }
+
+        syncTrainingInputs();
+        updatePreview();
+        updateRunButton();
+    };
+
+    const setExperienceLevel = (value) => {
+        state.experienceLevel = value || config.autoMode;
+        applyExperienceLevel();
+    };
+
+    // ========================================================================
     // Data Source Management
     // ========================================================================
 
@@ -850,10 +973,16 @@
         } else {
             toggleVisibility(elements.preloadedSection, false);
             toggleVisibility(elements.uploadSection, true);
-            toggleVisibility(elements.metadataChoice, Boolean(state.stagedUpload));
+            toggleVisibility(
+                elements.metadataChoice,
+                state.experienceLevel === 'advanced' && Boolean(state.stagedUpload)
+            );
             if (!state.stagedUpload) {
                 state.metadataReady = false;
                 hideAdvanced();
+            }
+            if (state.experienceLevel === 'basic' && state.stagedUpload) {
+                autoFinalizeMetadata();
             }
         }
 
@@ -925,6 +1054,13 @@
         toArray(elements.metadataModeRadios).forEach((radio) => {
             radio.addEventListener('change', (event) => {
                 setMetadataMode(event.target.value);
+            });
+        });
+
+        // Experience level selection
+        toArray(elements.experienceRadios).forEach((radio) => {
+            radio.addEventListener('change', (event) => {
+                setExperienceLevel(event.target.value);
             });
         });
 
@@ -1038,6 +1174,7 @@
         attachEventListeners();
         resetStatusPanel();
         toggleStatusPlaceholder();
+        setExperienceLevel(getExperienceLevel());
         setDataSource(getSelectedDataSource());
         setMetadataMode('template');
         updatePreview();
