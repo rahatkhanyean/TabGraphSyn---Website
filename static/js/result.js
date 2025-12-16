@@ -2,8 +2,9 @@
 
 let umapData = null;
 let currentHoveredRow = null;
+let allHeaders = [];
 let allDataRows = [];
-let currentDisplayMode = 'preview'; // 'preview' or 'all'
+let selectedColumns = [];
 
 // Initialize interactive UMAP plot with Plotly
 function initializeInteractiveUMAP(umapCoordinates, labels) {
@@ -182,84 +183,114 @@ function attachTableHoverListeners() {
     });
 }
 
-// Toggle between preview (20 rows) and all data view
-function toggleDataView() {
-    const tableBody = document.querySelector('.data-preview-table tbody');
-    const toggleButton = document.getElementById('toggle-data-view');
+// Capture the initially rendered preview so we have something to display before the full dataset loads
+function captureInitialTableData() {
+    const headerCells = document.querySelectorAll('.data-preview-table thead th');
+    const bodyRows = document.querySelectorAll('.data-preview-table tbody tr');
 
-    if (!tableBody || !toggleButton) return;
+    if (!headerCells.length || !bodyRows.length) return;
 
-    if (currentDisplayMode === 'preview') {
-        // Show all data
-        renderAllData();
-        currentDisplayMode = 'all';
-        toggleButton.textContent = 'Show Preview (20 rows)';
-        toggleButton.innerHTML = '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
-    } else {
-        // Show preview only
-        renderPreviewData();
-        currentDisplayMode = 'preview';
-        toggleButton.innerHTML = '<i class="fa-solid fa-expand"></i> View All Data';
+    allHeaders = Array.from(headerCells).map(cell => cell.textContent || '');
+    allDataRows = Array.from(bodyRows).map(row =>
+        Array.from(row.querySelectorAll('td')).map(cell => cell.textContent || '')
+    );
+
+    if (!selectedColumns.length) {
+        selectedColumns = allHeaders.map((_, index) => index);
     }
 
-    // Re-attach hover listeners after re-rendering
+    renderColumnSelector();
+    updateRowCountDisplay();
+}
+
+// Render the table using the selected columns
+function renderTable() {
+    const table = document.querySelector('.data-preview-table');
+    if (!table || !allHeaders.length) return;
+
+    // Ensure at least one column is selected
+    if (!selectedColumns.length) {
+        selectedColumns = allHeaders.map((_, index) => index);
+    }
+
+    const tableHeadRow = table.querySelector('thead tr');
+    const tableBody = table.querySelector('tbody');
+
+    if (!tableHeadRow || !tableBody) return;
+
+    tableHeadRow.innerHTML = '';
+    selectedColumns.forEach(index => {
+        const th = document.createElement('th');
+        th.textContent = allHeaders[index];
+        tableHeadRow.appendChild(th);
+    });
+
+    tableBody.innerHTML = '';
+    allDataRows.forEach(row => {
+        const tr = document.createElement('tr');
+        selectedColumns.forEach(columnIndex => {
+            const td = document.createElement('td');
+            td.textContent = row[columnIndex] ?? '';
+            tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+    });
+
+    updateRowCountDisplay();
     attachTableHoverListeners();
 }
 
-// Render all data rows in the table
-function renderAllData() {
-    const tableBody = document.querySelector('.data-preview-table tbody');
-    if (!tableBody || !allDataRows || allDataRows.length === 0) return;
-
-    tableBody.innerHTML = '';
-
-    allDataRows.forEach(row => {
-        const tr = document.createElement('tr');
-        row.forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-    });
-
-    updateRowCountDisplay();
-}
-
-// Render preview data (first 20 rows)
-function renderPreviewData() {
-    const tableBody = document.querySelector('.data-preview-table tbody');
-    if (!tableBody || !allDataRows || allDataRows.length === 0) return;
-
-    tableBody.innerHTML = '';
-
-    const previewRows = allDataRows.slice(0, 20);
-    previewRows.forEach(row => {
-        const tr = document.createElement('tr');
-        row.forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-    });
-
-    updateRowCountDisplay();
-}
-
-// Update the row count display
+// Update the row count and column selection display
 function updateRowCountDisplay() {
-    const cardTitle = document.querySelector('.data-card .card-title');
-    if (!cardTitle) return;
+    const rowCountDisplay = document.getElementById('row-count-display');
+    if (!rowCountDisplay) return;
 
     const totalRows = allDataRows.length;
-    const displayedRows = currentDisplayMode === 'preview' ? Math.min(20, totalRows) : totalRows;
+    const columnSummary = `${selectedColumns.length}/${allHeaders.length} columns`;
+    rowCountDisplay.textContent = `Showing ${totalRows} rows • ${columnSummary}`;
+}
 
-    if (currentDisplayMode === 'preview' && totalRows > 20) {
-        cardTitle.innerHTML = `Preview (showing ${displayedRows} of ${totalRows} rows)`;
-    } else {
-        cardTitle.innerHTML = `Data Preview (${displayedRows} rows)`;
+function renderColumnSelector() {
+    const menu = document.getElementById('column-selector-menu');
+    if (!menu || !allHeaders.length) return;
+
+    menu.innerHTML = '';
+
+    allHeaders.forEach((header, index) => {
+        const option = document.createElement('label');
+        option.className = 'column-selector-option';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = index;
+        checkbox.checked = selectedColumns.includes(index);
+        checkbox.addEventListener('change', (event) => {
+            updateSelectedColumns(index, event.target.checked);
+        });
+
+        const text = document.createElement('span');
+        text.textContent = header;
+
+        option.appendChild(checkbox);
+        option.appendChild(text);
+        menu.appendChild(option);
+    });
+}
+
+function updateSelectedColumns(columnIndex, isChecked) {
+    if (isChecked && !selectedColumns.includes(columnIndex)) {
+        selectedColumns.push(columnIndex);
+    } else if (!isChecked && selectedColumns.includes(columnIndex)) {
+        if (selectedColumns.length === 1) {
+            return; // Prevent removing the last remaining column
+        }
+        selectedColumns = selectedColumns.filter(index => index !== columnIndex);
     }
+
+    selectedColumns.sort((a, b) => a - b);
+
+    renderColumnSelector();
+    renderTable();
 }
 
 // Load full dataset via API
@@ -270,14 +301,26 @@ async function loadFullDataset(token) {
             throw new Error('Failed to load full dataset');
         }
         const data = await response.json();
-        allDataRows = data.rows;
+        const previousHeaders = selectedColumns.map(index => allHeaders[index]);
 
-        // Enable the "View All" button
-        const toggleButton = document.getElementById('toggle-data-view');
-        if (toggleButton && allDataRows.length > 20) {
-            toggleButton.disabled = false;
-            toggleButton.style.display = 'inline-flex';
+        allHeaders = data.headers || [];
+        allDataRows = data.rows || [];
+
+        if (previousHeaders.length) {
+            selectedColumns = allHeaders.reduce((acc, header, index) => {
+                if (previousHeaders.includes(header)) {
+                    acc.push(index);
+                }
+                return acc;
+            }, []);
         }
+
+        if (!selectedColumns.length) {
+            selectedColumns = allHeaders.map((_, index) => index);
+        }
+
+        renderColumnSelector();
+        renderTable();
     } catch (error) {
         console.error('Error loading full dataset:', error);
     }
@@ -304,17 +347,32 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Capture the initially rendered preview
+    captureInitialTableData();
+
     // Attach hover listeners to table rows
     attachTableHoverListeners();
 
-    // Load full dataset for "View All" functionality
+    // Load full dataset so the preview shows every row
     if (runToken) {
         loadFullDataset(runToken);
     }
 
-    // Attach click handler to toggle button
-    const toggleButton = document.getElementById('toggle-data-view');
-    if (toggleButton) {
-        toggleButton.addEventListener('click', toggleDataView);
+    // Attach click handler to column selector toggle
+    const columnSelector = document.getElementById('column-selector');
+    const columnToggleButton = document.getElementById('column-selector-toggle');
+    const columnMenu = document.getElementById('column-selector-menu');
+
+    if (columnSelector && columnToggleButton && columnMenu) {
+        columnToggleButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            columnMenu.classList.toggle('open');
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!columnSelector.contains(event.target)) {
+                columnMenu.classList.remove('open');
+            }
+        });
     }
 });
