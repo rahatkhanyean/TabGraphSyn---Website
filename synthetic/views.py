@@ -628,9 +628,8 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
     if has_csv:
         df = pd.read_csv(csv_path)
         generated_rows = int(len(df))
-        preview = df.head(20)
-        preview_headers = preview.columns.tolist()
-        preview_rows = preview.fillna('').astype(str).values.tolist()
+        preview_headers = df.columns.tolist()
+        preview_rows = df.fillna('').astype(str).values.tolist()
 
     metadata['generated_rows'] = generated_rows
 
