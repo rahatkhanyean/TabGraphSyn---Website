@@ -81,40 +81,37 @@
                     <section class="card data-card">
                         <div class="card-header">
                             <div>
-                                <div class="card-title">Preview (first 20 rows)</div>
+                                <div class="card-title">Data (full dataset)</div>
                                 <div class="card-subtitle">Sanity check the generated records before downstream use. Hover over a row to see it highlighted in the UMAP panel on the right.</div>
                             </div>
                         </div>
-                        {% if has_output and preview_rows %}
+                        {% if has_output %}
+                            <div class="table-controls">
+                                <label for="column-selector">Columns to show</label>
+                                <div class="table-controls-inline">
+                                    <select id="column-selector" multiple size="6" aria-label="Select columns to display">
+                                    </select>
+                                    <p class="control-hint">Use the dropdown to select or deselect columns. Hover-to-UMAP highlighting stays available.</p>
+                                </div>
+                            </div>
                             <div class="table-wrapper">
                                 <table class="data-table data-preview-table">
                                     <thead>
                                         <tr>
-                                            {% for header in preview_headers %}
-                                                <th>{{ header }}</th>
-                                            {% endfor %}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for row in preview_rows %}
-                                            <tr>
-                                                {% for cell in row %}
-                                                    <td>{{ cell }}</td>
-                                                {% endfor %}
-                                            </tr>
-                                        {% endfor %}
+                                        <tr>
+                                            <td class="loading-row">Loading full dataset…</td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
-                            {% if metadata.generated_rows > 20 %}
-                                <div class="action-row" style="margin-top: 16px;">
-                                    <button id="toggle-data-view" class="secondary-button" style="display: none;">
-                                        <i class="fa-solid fa-expand"></i> View All Data
-                                    </button>
-                                </div>
-                            {% endif %}
-                        {% elif has_output %}
-                            <p class="empty-state">Synthetic file generated, but no rows were returned.</p>
+                            <div class="action-row" style="margin-top: 16px;">
+                                <button id="toggle-data-view" class="secondary-button" disabled>
+                                    <i class="fa-solid fa-compress"></i> Show Preview (20 rows)
+                                </button>
+                            </div>
                         {% else %}
                             <p class="empty-state">This mode does not produce a sample file. Check the evaluation summary above for status.</p>
                         {% endif %}

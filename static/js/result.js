@@ -3,7 +3,33 @@
 let umapData = null;
 let currentHoveredRow = null;
 let allDataRows = [];
-let currentDisplayMode = 'preview'; // 'preview' or 'all'
+let allHeaders = [];
+let selectedHeaders = [];
+let currentDisplayMode = 'all'; // start with full dataset once loaded
+
+// Helper to parse embedded JSON safely
+function parseJsonScript(id) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    try {
+        return JSON.parse(el.textContent);
+    } catch (err) {
+        console.warn(`Failed to parse JSON script ${id}`, err);
+        return null;
+    }
+}
+
+// Fallback: extract headers/rows from the server-rendered table if JSON data is unavailable
+function captureTableFromDom() {
+    const table = document.querySelector('.data-preview-table');
+    if (!table) return { headers: [], rows: [] };
+
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
+        return Array.from(tr.querySelectorAll('td')).map(td => td.textContent);
+    });
+    return { headers, rows };
+}
 
 // Initialize interactive UMAP plot with Plotly
 function initializeInteractiveUMAP(umapCoordinates, labels) {
@@ -168,10 +194,15 @@ function attachTableHoverListeners() {
 
     const rows = tableBody.querySelectorAll('tr');
     rows.forEach((row, index) => {
+        if (!row.hasAttribute('data-row-index')) {
+            row.setAttribute('data-row-index', index);
+        }
         row.addEventListener('mouseenter', function() {
-            currentHoveredRow = index;
+            const rowIndexAttr = this.getAttribute('data-row-index');
+            const dataIndex = rowIndexAttr !== null ? parseInt(rowIndexAttr, 10) : index;
+            currentHoveredRow = dataIndex;
             this.classList.add('row-highlighted');
-            highlightUMAPPoint(index);
+            highlightUMAPPoint(dataIndex);
         });
 
         row.addEventListener('mouseleave', function() {
@@ -191,19 +222,16 @@ function toggleDataView() {
 
     if (currentDisplayMode === 'preview') {
         // Show all data
-        renderAllData();
         currentDisplayMode = 'all';
         toggleButton.textContent = 'Show Preview (20 rows)';
         toggleButton.innerHTML = '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
     } else {
         // Show preview only
-        renderPreviewData();
         currentDisplayMode = 'preview';
         toggleButton.innerHTML = '<i class="fa-solid fa-expand"></i> View All Data';
     }
 
-    // Re-attach hover listeners after re-rendering
-    attachTableHoverListeners();
+    renderCurrentView();
 }
 
 // Render all data rows in the table
@@ -211,19 +239,7 @@ function renderAllData() {
     const tableBody = document.querySelector('.data-preview-table tbody');
     if (!tableBody || !allDataRows || allDataRows.length === 0) return;
 
-    tableBody.innerHTML = '';
-
-    allDataRows.forEach(row => {
-        const tr = document.createElement('tr');
-        row.forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-    });
-
-    updateRowCountDisplay();
+    renderRows(allDataRows, 0);
 }
 
 // Render preview data (first 20 rows)
@@ -231,20 +247,7 @@ function renderPreviewData() {
     const tableBody = document.querySelector('.data-preview-table tbody');
     if (!tableBody || !allDataRows || allDataRows.length === 0) return;
 
-    tableBody.innerHTML = '';
-
-    const previewRows = allDataRows.slice(0, 20);
-    previewRows.forEach(row => {
-        const tr = document.createElement('tr');
-        row.forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-    });
-
-    updateRowCountDisplay();
+    renderRows(allDataRows.slice(0, 20), 0);
 }
 
 // Update the row count display
@@ -258,28 +261,122 @@ function updateRowCountDisplay() {
     if (currentDisplayMode === 'preview' && totalRows > 20) {
         cardTitle.innerHTML = `Preview (showing ${displayedRows} of ${totalRows} rows)`;
     } else {
-        cardTitle.innerHTML = `Data Preview (${displayedRows} rows)`;
+        cardTitle.innerHTML = `Data (${displayedRows} rows)`;
     }
+}
+
+// Re-render current view (preview or all) with selected columns
+function renderCurrentView() {
+    if (!allDataRows || allDataRows.length === 0) return;
+
+    if (currentDisplayMode === 'preview') {
+        renderPreviewData();
+    } else {
+        renderAllData();
+    }
+
+    updateRowCountDisplay();
+    attachTableHoverListeners();
+}
+
+// Build table header to match selected columns
+function updateTableHeader(headersToRender) {
+    const headerRow = document.querySelector('.data-preview-table thead tr');
+    if (!headerRow) return;
+
+    headerRow.innerHTML = '';
+    headersToRender.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+}
+
+// Determine column indexes to render based on selected headers
+function getSelectedColumnIndexes() {
+    if (!allHeaders || allHeaders.length === 0) return [];
+    if (!selectedHeaders || selectedHeaders.length === 0) return allHeaders.map((_, idx) => idx);
+    return selectedHeaders
+        .map(header => allHeaders.indexOf(header))
+        .filter(index => index >= 0);
+}
+
+// Generic row renderer honoring selected columns and preserving original row index
+function renderRows(rows, offset) {
+    const tableBody = document.querySelector('.data-preview-table tbody');
+    if (!tableBody) return;
+
+    const columnIndexes = getSelectedColumnIndexes();
+    const headersToRender = columnIndexes.length ? columnIndexes.map(idx => allHeaders[idx]) : allHeaders;
+    tableBody.innerHTML = '';
+
+    rows.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-row-index', offset + idx);
+
+        if (columnIndexes.length === 0) {
+            row.forEach(cell => {
+                const td = document.createElement('td');
+                td.textContent = cell;
+                tr.appendChild(td);
+            });
+        } else {
+            columnIndexes.forEach(colIdx => {
+                const td = document.createElement('td');
+                td.textContent = row[colIdx];
+                tr.appendChild(td);
+            });
+        }
+        tableBody.appendChild(tr);
+    });
+
+    updateTableHeader(headersToRender);
+}
+
+// Populate the column selector dropdown
+function populateColumnSelector(headers) {
+    const selector = document.getElementById('column-selector');
+    if (!selector || !headers || headers.length === 0) return;
+
+    selector.innerHTML = '';
+    headers.forEach(header => {
+        const option = document.createElement('option');
+        option.value = header;
+        option.textContent = header;
+        option.selected = selectedHeaders.length === 0 || selectedHeaders.includes(header);
+        selector.appendChild(option);
+    });
 }
 
 // Load full dataset via API
 async function loadFullDataset(token) {
     try {
-        const response = await fetch(`/synthetic/api/dataset/${token}/`);
+        const response = await fetch(`/api/dataset/${token}/`);
         if (!response.ok) {
             throw new Error('Failed to load full dataset');
         }
         const data = await response.json();
+        allHeaders = data.headers || allHeaders;
+        selectedHeaders = selectedHeaders.length ? selectedHeaders.filter(h => allHeaders.includes(h)) : [...allHeaders];
         allDataRows = data.rows;
 
-        // Enable the "View All" button
+        // Enable the toggle button
         const toggleButton = document.getElementById('toggle-data-view');
-        if (toggleButton && allDataRows.length > 20) {
+        if (toggleButton) {
             toggleButton.disabled = false;
             toggleButton.style.display = 'inline-flex';
+            toggleButton.innerHTML = '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
         }
+
+        populateColumnSelector(allHeaders);
+        currentDisplayMode = 'all';
+        renderCurrentView();
     } catch (error) {
         console.error('Error loading full dataset:', error);
+        const tableBody = document.querySelector('.data-preview-table tbody');
+        if (tableBody) {
+            tableBody.innerHTML = '<tr><td class="loading-row">Failed to load dataset.</td></tr>';
+        }
     }
 }
 
@@ -288,6 +385,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check if we're on the result page
     const resultPage = document.querySelector('.result-layout');
     if (!resultPage) return;
+
+    // Initial placeholder while full dataset loads
+    const tableBody = document.querySelector('.data-preview-table tbody');
+    if (tableBody) {
+        tableBody.innerHTML = '<tr><td class="loading-row">Loading full dataset…</td></tr>';
+    }
 
     // Get the run token from the page
     const tokenElement = document.querySelector('[data-run-token]');
@@ -315,6 +418,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // Attach click handler to toggle button
     const toggleButton = document.getElementById('toggle-data-view');
     if (toggleButton) {
+        toggleButton.style.display = 'inline-flex';
         toggleButton.addEventListener('click', toggleDataView);
+    }
+
+    // Column selector change handler
+    const columnSelector = document.getElementById('column-selector');
+    if (columnSelector) {
+        columnSelector.addEventListener('change', () => {
+            const selected = Array.from(columnSelector.selectedOptions).map(opt => opt.value);
+            selectedHeaders = selected.length ? selected : [...allHeaders];
+            renderCurrentView();
+        });
     }
 });

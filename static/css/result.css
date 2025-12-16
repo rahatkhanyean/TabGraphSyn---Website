@@ -175,6 +175,12 @@
     max-width: 460px;
 }
 
+/* Cap table height so long previews scroll instead of stretching the card */
+.data-card .table-wrapper {
+    max-height: 420px;
+    overflow: auto;
+}
+
 /* Empty State Enhancement for Result Page */
 .empty-state {
     border: 1px dashed rgba(148, 163, 184, 0.4);
@@ -267,6 +273,49 @@
 .data-preview-table tbody tr.row-highlighted td {
     font-weight: 600;
     color: var(--text-primary);
+}
+
+/* Ensure sticky headers stay opaque while scrolling long previews */
+.data-preview-table th {
+    background: #f6f7ff;
+    z-index: 12;
+}
+
+.table-controls {
+    margin: 12px 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.table-controls-inline {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.table-controls label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+#column-selector {
+    min-width: 220px;
+    max-width: 100%;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: #fff;
+    font-size: 14px;
+}
+
+.control-hint {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    max-width: 360px;
 }
 
 /* Toggle Data View Button */
