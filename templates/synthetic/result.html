@@ -81,9 +81,35 @@
                     <section class="card data-card">
                         <div class="card-header">
                             <div>
-                                <div class="card-title">Preview (first 20 rows)</div>
-                                <div class="card-subtitle">Sanity check the generated records before downstream use. Hover over a row to see it highlighted in the UMAP panel on the right.</div>
+                                <div class="card-title">Preview</div>
+                                <div class="card-subtitle">Inspect the full synthetic CSV and toggle which columns appear in the preview. Hover over a row to see it highlighted in the UMAP panel on the right.</div>
                             </div>
+                            {% if has_output and preview_headers %}
+                                <div class="card-actions">
+                                    <div class="column-selector" data-column-selector>
+                                        <button type="button" id="column-selector-toggle" class="secondary-button compact">
+                                            <i class="fa-solid fa-table-columns"></i>
+                                            Columns
+                                            <span id="column-selector-count" class="column-selector-count">All</span>
+                                            <i class="fa-solid fa-caret-down"></i>
+                                        </button>
+                                        <div id="column-selector-menu" class="column-selector-menu">
+                                            <div class="column-selector-actions">
+                                                <button type="button" class="tertiary-button" id="column-select-all">Select all</button>
+                                                <button type="button" class="tertiary-button" id="column-clear-all">Clear all</button>
+                                            </div>
+                                            <div class="column-selector-options">
+                                                {% for header in preview_headers %}
+                                                    <label class="column-selector-option">
+                                                        <input type="checkbox" name="column" value="{{ header }}" checked>
+                                                        <span>{{ header }}</span>
+                                                    </label>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
                         </div>
                         {% if has_output and preview_rows %}
                             <div class="table-wrapper">
@@ -106,13 +132,6 @@
                                     </tbody>
                                 </table>
                             </div>
-                            {% if metadata.generated_rows > 20 %}
-                                <div class="action-row" style="margin-top: 16px;">
-                                    <button id="toggle-data-view" class="secondary-button" style="display: none;">
-                                        <i class="fa-solid fa-expand"></i> View All Data
-                                    </button>
-                                </div>
-                            {% endif %}
                         {% elif has_output %}
                             <p class="empty-state">Synthetic file generated, but no rows were returned.</p>
                         {% else %}
