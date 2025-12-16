@@ -10,6 +10,21 @@
     width: 100%;
 }
 
+.result-dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 28px;
+    align-items: flex-start;
+    margin-top: 32px;
+}
+
+.dashboard-column {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
 /* Result Chip */
 .result-chip {
     display: inline-flex;
@@ -230,6 +245,12 @@
     box-shadow: 0 12px 24px rgba(99, 102, 241, 0.12);
 }
 
+.umap-card .umap-plot-container,
+.umap-card .image-wrapper,
+.umap-card .empty-state {
+    margin-top: 16px;
+}
+
 /* Interactive Table Row Highlighting */
 .data-preview-table tbody tr {
     transition: all 0.2s ease;
@@ -299,5 +320,12 @@
 
     #interactive-umap-plot {
         height: 400px !important;
+    }
+}
+
+@media (max-width: 900px) {
+    .result-dashboard {
+        grid-template-columns: 1fr;
+        gap: 24px;
     }
 }
