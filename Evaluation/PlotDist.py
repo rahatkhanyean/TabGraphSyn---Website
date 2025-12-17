@@ -210,7 +210,7 @@ class models_evaluator:
                     shape = None
                     log_counts = False
 
-                    sbplt_divider = int(np.ceil(len(categorical_cols)/4))
+                    sbplt_divider = int(np.ceil(len(categorical_cols)/2))
 
                     if shape is None:
                         if len(categorical_cols) == 1:
@@ -220,7 +220,7 @@ class models_evaluator:
                         elif len(categorical_cols) == 3:
                             shape = (1, 3)
                         else:
-                            shape = (sbplt_divider, 4)
+                            shape = (2, sbplt_divider)
 
                     #end_idx = sum([len(c) for c in ohe.categories_]) + len(num_cols)
                     X_fake_cat_df = syn[categorical_cols].copy()
@@ -228,7 +228,6 @@ class models_evaluator:
                     X_real_cat_df = train_set[categorical_cols].copy()
                     X_real_cat_df['type'] = 'real'
                     X_real_fake_cat = pd.concat([X_real_cat_df, X_fake_cat_df])
-                    X_real_fake_cat.reset_index(drop=True, inplace=True)
                     X_real_fake_cat.columns = categorical_cols + ['type']
 
                     fig, axes = plt.subplots(shape[0], shape[1])
@@ -236,12 +235,10 @@ class models_evaluator:
                     #fig.set_size_inches((6, 6))
 
                     for idx, ax in enumerate(axes.flatten()):
-                        
-                        
                         if idx < len(categorical_cols):
-                            _plot = sns.histplot(x=categorical_cols[idx], hue='type',
-                                                data=X_real_fake_cat, multiple="dodge",
-                                                stat='density', shrink=0.8, common_norm=False, ax=ax)
+                            _plot = sns.countplot(x=categorical_cols[idx], hue='type',
+                                                data=X_real_fake_cat, ax=ax,
+                                                order=X_real_cat_df.iloc[:, idx].value_counts().index)
                             if idx > 0:
                                 ax.get_legend().remove()
                             else:
@@ -252,7 +249,7 @@ class models_evaluator:
                             if log_counts:
                                 _plot.set_yscale("log")
                             ax.set_xticks([])
-                            # ax.set_yticks([])
+                            ax.set_yticks([])
                             ax.minorticks_off()
                             #ax.xlabel(fontsize = 16)
                             ax.set_ylabel(None)
@@ -287,7 +284,7 @@ class models_evaluator:
                     # X_real_num_df = scaler.transform(X_real_num_df)
                     # X_fake_num_df = scaler.transform(X_fake_num_df)
 
-                    sbplt_divider = int(np.ceil(len(numeric_cols)/4))
+                    sbplt_divider = int(np.ceil(len(numeric_cols)/2))
 
                     if shape is None:
                     # by default, we plot 3 columns with up to 2 rows
@@ -307,7 +304,7 @@ class models_evaluator:
                         elif len(numeric_cols) == 3:
                             shape = (1, 3)
                         else:
-                            shape = (sbplt_divider, 4)
+                            shape = (2, sbplt_divider)
 
                     if subsample:
                         real_size = int(np.minimum(X_real_num_df.shape[0], 5e4))

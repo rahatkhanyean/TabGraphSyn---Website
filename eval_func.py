@@ -42,7 +42,7 @@ def evaluation_func(fake_file_ls, dataset_name = "Nothing", train_name = None):
             train_name =    "./Datasets/MIMIC/mimic_statics_train.pkl"
             dataset_name = 'MIMIC'
         elif 'AIDS' in fake_file_name:
-            train_name =    "./Datasets/AIDS/cat16_num10/survival_AIDS_real_cat16_num10.pkl"
+            train_name =    "D:\Personal\Assessment - UAB\TabGraphSyn - Django\src\data\original\AIDS\AIDS.csv"
             dataset_name = 'AIDS'
         elif 'WBCD' in fake_file_name:
             train_name =    "./Datasets/WBCD/breast_cancer_wisconsin_cat10.pkl"
@@ -331,10 +331,7 @@ def evaluation_func(fake_file_ls, dataset_name = "Nothing", train_name = None):
 
 
 if __name__ == '__main__':
-    fake_file_ls = [r'E\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\MIMIC.csv',
-                    r'E\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\TCGA.csv',
-                    r'E\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\AIDS.csv',
-                    r'E\relational-graph-conditioned-diffusion-main - Simple Condition with GIN3 - Result\WBCD.csv']
+    fake_file_ls = [r'D:\Personal\Assessment - UAB\TabGraphSyn - Django\src\data\synthetic\AIDS\SingleTable\single_table\AIDS.csv']
 
     output_df = evaluation_func(fake_file_ls)
     print(output_df)
