@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}TabGraphSyn - Generate Synthetic Patient Data{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Hero Section */
+    .hero-section {
+        text-align: center;
+        padding: 80px 24px 60px;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%);
+        border-radius: var(--radius-lg);
+        margin-bottom: 60px;
+        animation: fadeIn 0.6s ease-out;
+    }
+
+    .hero-title {
+        font-size: clamp(32px, 5vw, 48px);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin: 0 0 16px;
+        background: linear-gradient(135deg, var(--accent) 0%, #ec4899 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .hero-subtitle {
+        font-size: clamp(16px, 2.5vw, 20px);
+        color: var(--text-muted);
+        margin: 0 auto 40px;
+        max-width: 600px;
+        line-height: 1.6;
+    }
+
+    /* Video Container */
+    .video-container {
+        max-width: 900px;
+        margin: 0 auto 40px;
+        position: relative;
+        padding-bottom: 56.25%; /* 16:9 aspect ratio */
+        height: 0;
+        overflow: hidden;
+        border-radius: var(--radius-lg);
+        box-shadow: 0 28px 56px rgba(79, 70, 229, 0.18);
+        background: #000;
+    }
+
+    .video-container iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+    }
+
+    .video-placeholder {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        color: #666;
+        width: 100%;
+        padding: 24px;
+    }
+
+    .video-placeholder i {
+        font-size: 64px;
+        margin-bottom: 16px;
+        opacity: 0.3;
+    }
+
+    /* CTA Button */
+    .cta-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 42px;
+        font-size: 18px;
+        font-weight: 600;
+        background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+        color: white;
+        border: none;
+        border-radius: var(--radius-lg);
+        cursor: pointer;
+        text-decoration: none;
+        box-shadow: 0 12px 28px rgba(99, 102, 241, 0.35);
+        transition: all var(--transition-base);
+        animation: pulse 2s infinite;
+    }
+
+    .cta-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 16px 36px rgba(99, 102, 241, 0.45);
+        animation: none;
+    }
+
+    .cta-button:active {
+        transform: translateY(-1px);
+    }
+
+    @keyframes pulse {
+        0%, 100% {
+            box-shadow: 0 12px 28px rgba(99, 102, 241, 0.35);
+        }
+        50% {
+            box-shadow: 0 12px 28px rgba(99, 102, 241, 0.55);
+        }
+    }
+
+    /* Features Section */
+    .features-section {
+        margin-top: 80px;
+        padding: 0 24px;
+        animation: fadeInUp 0.8s ease-out 0.3s backwards;
+    }
+
+    .features-title {
+        text-align: center;
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 48px;
+        color: var(--text-primary);
+    }
+
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 32px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .feature-card {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(99, 102, 241, 0.14);
+        border-radius: var(--radius-lg);
+        padding: 32px;
+        text-align: center;
+        transition: all var(--transition-base);
+        box-shadow: 0 12px 28px rgba(79, 70, 229, 0.08);
+    }
+
+    .feature-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 20px 40px rgba(79, 70, 229, 0.16);
+        border-color: var(--accent);
+    }
+
+    .feature-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 24px;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(236, 72, 153, 0.15) 100%);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        color: var(--accent);
+    }
+
+    .feature-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 12px;
+        color: var(--text-primary);
+    }
+
+    .feature-description {
+        font-size: 15px;
+        color: var(--text-muted);
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .hero-section {
+            padding: 60px 16px 40px;
+        }
+
+        .features-section {
+            margin-top: 60px;
+            padding: 0 16px;
+        }
+
+        .features-grid {
+            gap: 24px;
+        }
+
+        .cta-button {
+            padding: 16px 32px;
+            font-size: 16px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <h1 class="hero-title">TabGraphSyn</h1>
+        <p class="hero-subtitle">
+            Generate high-quality synthetic patient data using state-of-the-art graph diffusion models.
+            Upload your CSV, customize parameters, and produce privacy-preserving synthetic datasets.
+        </p>
+
+        <!-- Video Container -->
+        {% if youtube_video_url %}
+            <div class="video-container">
+                <iframe
+                    src="{{ youtube_video_url }}"
+                    title="TabGraphSyn Tutorial"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+                </iframe>
+            </div>
+        {% else %}
+            <div class="video-container">
+                <div class="video-placeholder">
+                    <i class="fa-solid fa-video"></i>
+                    <p>Tutorial video will appear here once configured</p>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- CTA Button -->
+        <a href="{% url 'synthetic:generate' %}" class="cta-button">
+            <i class="fa-solid fa-rocket"></i>
+            Start Generating
+        </a>
+    </div>
+
+    <!-- Features Section -->
+    <section class="features-section">
+        <h2 class="features-title">How It Works</h2>
+
+        <div class="features-grid">
+            <!-- Feature 1: Upload CSV -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                </div>
+                <h3 class="feature-title">Upload Your CSV</h3>
+                <p class="feature-description">
+                    Simply upload your patient data CSV file. Our system automatically profiles columns,
+                    detects data types, and prepares metadata for generation.
+                </p>
+            </div>
+
+            <!-- Feature 2: AI Generation -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <h3 class="feature-title">AI-Powered Generation</h3>
+                <p class="feature-description">
+                    TabGraphSyn uses advanced graph diffusion models with VAE, GNN, and diffusion components
+                    to learn patterns and generate realistic synthetic data.
+                </p>
+            </div>
+
+            <!-- Feature 3: Download Results -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-download"></i>
+                </div>
+                <h3 class="feature-title">Download & Analyze</h3>
+                <p class="feature-description">
+                    Review quality metrics, visualize data distributions with UMAP projections,
+                    and download your privacy-preserving synthetic dataset.
+                </p>
+            </div>
+        </div>
+    </section>
+{% endblock %}

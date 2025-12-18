@@ -1,10 +1,22 @@
 #!/usr/bin/env python
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+def _safe_component(value, max_length=48):
+    safe = ''.join(char if char.isalnum() or char in {'-', '_'} else '_' for char in value)
+    if len(safe) <= max_length:
+        return safe
+    digest = hashlib.sha1(safe.encode('utf-8')).hexdigest()[:8]
+    keep = max_length - 9
+    if keep < 1:
+        return digest
+    return f"{safe[:keep]}_{digest}"
 
 
 def main():
@@ -53,9 +65,9 @@ def main():
     
     # Use custom prefix if provided, otherwise use dataset and table names
     if args.log_prefix:
-        log_prefix = args.log_prefix
+        log_prefix = _safe_component(args.log_prefix, max_length=64)
     else:
-        log_prefix = f"{args.dataset_name}_{args.table_name}_baseline"
+        log_prefix = f"{_safe_component(args.dataset_name)}_{_safe_component(args.table_name)}_baseline"
     
     # When using single-log, only create one log file for everything
     if args.single_log:
@@ -218,7 +230,8 @@ def run_command(command, description, env=None):
         
         # Use custom prefix if provided
         if args.log_prefix:
-            output_file = f"logs/{args.log_prefix}_{description.replace(' ', '_').lower()}_{timestamp}.txt"
+            safe_prefix = _safe_component(args.log_prefix, max_length=64)
+            output_file = f"logs/{safe_prefix}_{description.replace(' ', '_').lower()}_{timestamp}.txt"
         else:
             output_file = f"logs/{description.replace(' ', '_').lower()}_{timestamp}.txt"
         

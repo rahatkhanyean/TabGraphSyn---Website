@@ -5,7 +5,8 @@ from . import views
 app_name = 'synthetic'
 
 urlpatterns = [
-    path('', views.upload_view, name='upload'),
+    path('', views.home_view, name='home'),
+    path('generate/', views.upload_view, name='generate'),
     path('history/', views.history_view, name='history'),
     path('api/stage-upload/', views.api_stage_upload, name='api-stage-upload'),
     path('api/finalize-metadata/', views.api_finalize_metadata, name='api-finalize-metadata'),

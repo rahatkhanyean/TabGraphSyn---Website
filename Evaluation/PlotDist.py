@@ -22,7 +22,10 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, average_pre
 from scipy.stats import pearsonr, wasserstein_distance, ks_2samp
 import matplotlib.pyplot as plt
 import seaborn as sns
-from dython.nominal import associations
+try:
+    from dython.nominal import associations
+except ImportError:
+    associations = None
 
 
 class models_evaluator:
@@ -392,5 +395,4 @@ class models_evaluator:
 
 
 #########################################################################################################################
-
 

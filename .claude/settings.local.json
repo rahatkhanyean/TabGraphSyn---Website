@@ -20,7 +20,9 @@
       "Bash(pip install:*)",
       "Bash(wsl --list:*)",
       "Bash(wsl --status:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(timeout 10 python:*)",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

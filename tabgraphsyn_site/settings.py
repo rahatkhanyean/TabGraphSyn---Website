@@ -162,3 +162,12 @@ if not DEBUG:
 # Maximum upload file size: 100 MB (100 * 1024 * 1024 bytes)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB in bytes
 FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB in bytes
+
+# =============================================================================
+# Homepage Configuration
+# =============================================================================
+# YouTube video URL for homepage tutorial
+# Format: https://www.youtube.com/embed/VIDEO_ID
+# Example: https://www.youtube.com/embed/dQw4w9WgXcQ
+# Leave empty to show placeholder
+YOUTUBE_VIDEO_URL = os.getenv('YOUTUBE_VIDEO_URL', '')

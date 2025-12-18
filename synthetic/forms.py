@@ -133,7 +133,10 @@ class SyntheticDataForm(forms.Form):
         elif data_source == 'uploaded':
             if not staging_token:
                 self.add_error(None, 'Upload a dataset before running the pipeline.')
-            if metadata_mode not in {'template', 'custom'}:
+            if metadata_mode in (None, ''):
+                cleaned['metadata_mode'] = 'custom'
+                metadata_mode = 'custom'
+            elif metadata_mode not in {'template', 'custom'}:
                 self.add_error('metadata_mode', 'Choose how metadata should be provided.')
             if metadata_mode == 'template' and not metadata_template:
                 self.add_error('metadata_template', 'Select a metadata template.')

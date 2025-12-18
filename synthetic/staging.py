@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -19,6 +20,7 @@ from .constants import UPLOAD_MARKER
 STAGING_ROOT = Path(settings.MEDIA_ROOT) / 'uploads'
 DEFAULT_TABLE_NAME = 'table'
 DATA_ROOT = Path(settings.BASE_DIR) / 'src' / 'data' / 'original'
+MAX_SLUG_LENGTH = 48
 
 
 @dataclass
@@ -45,7 +47,14 @@ def _slugify(raw: str, fallback: str) -> str:
     cleaned = re.sub(r'[^A-Za-z0-9]+', '_', raw).strip('_')
     if not cleaned:
         return fallback
-    return cleaned.lower()
+    cleaned = cleaned.lower()
+    if len(cleaned) <= MAX_SLUG_LENGTH:
+        return cleaned
+    digest = hashlib.sha1(cleaned.encode('utf-8')).hexdigest()[:8]
+    keep = MAX_SLUG_LENGTH - 9
+    if keep < 1:
+        return digest
+    return f"{cleaned[:keep]}_{digest}"
 
 
 def _write_upload(upload: UploadedFile, destination: Path) -> None:

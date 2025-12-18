@@ -95,7 +95,7 @@
 
         // UI components
         uploadSummary: document.getElementById('upload-summary'),
-        metadataChoice: document.getElementById('metadata-choice'),
+        metadataChoice: document.getElementById('advanced-metadata-section'),
         metadataStep: document.getElementById('metadata-step'),
         metadataTemplatePanel: document.getElementById('metadata-template-panel'),
         metadataCustomPanel: document.getElementById('metadata-custom-panel'),
@@ -105,6 +105,16 @@
         metadataReminder: document.getElementById('metadata-reminder'),
         columnTableBody: document.querySelector('#column-summary tbody'),
         runButton: document.getElementById('run-button'),
+
+        // Basic mode status
+        basicModeStatus: document.getElementById('basic-mode-status'),
+        basicStatusMessage: document.getElementById('basic-status-message'),
+
+        // Advanced options elements
+        advancedOptionsContainer: document.getElementById('advanced-options-container'),
+        toggleAdvancedButton: document.getElementById('toggle-advanced-options'),
+        advancedToggleIcon: document.getElementById('advanced-toggle-icon'),
+        advancedMetadataSection: document.getElementById('advanced-metadata-section'),
 
         // Status panel elements
         statusPanel: document.getElementById('run-status-panel'),
@@ -217,12 +227,52 @@
         elements.uploadSummary.style.color = isError ? '#c53' : '';
     };
 
+    const showBasicModeStatus = (message, isSuccess = true) => {
+        if (!elements.basicModeStatus || !elements.basicStatusMessage) return;
+
+        elements.basicStatusMessage.textContent = message;
+        elements.basicModeStatus.style.display = 'block';
+
+        if (isSuccess) {
+            elements.basicModeStatus.style.backgroundColor = 'rgba(34, 197, 94, 0.1)';
+            elements.basicModeStatus.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+            elements.basicStatusMessage.style.color = '#16a34a';
+        } else {
+            elements.basicModeStatus.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+            elements.basicModeStatus.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+            elements.basicStatusMessage.style.color = '#dc2626';
+        }
+    };
+
+    const hideBasicModeStatus = () => {
+        if (!elements.basicModeStatus) return;
+        elements.basicModeStatus.style.display = 'none';
+    };
+
     const showAdvanced = () => {
         // Can be used to show additional advanced options
     };
 
     const hideAdvanced = () => {
         // Can be used to hide additional advanced options
+    };
+
+    const toggleAdvancedOptions = () => {
+        if (!elements.advancedOptionsContainer || !elements.toggleAdvancedButton) return;
+
+        state.advancedOptionsVisible = !state.advancedOptionsVisible;
+
+        if (state.advancedOptionsVisible) {
+            elements.advancedOptionsContainer.hidden = false;
+            if (elements.advancedToggleIcon) elements.advancedToggleIcon.textContent = '▼';
+            elements.toggleAdvancedButton.innerHTML = '<span id="advanced-toggle-icon">▼</span> Hide Advanced Options';
+        } else {
+            elements.advancedOptionsContainer.hidden = true;
+            if (elements.advancedToggleIcon) elements.advancedToggleIcon.textContent = '▶';
+            elements.toggleAdvancedButton.innerHTML = '<span id="advanced-toggle-icon">▶</span> Show Advanced Options';
+        }
+
+        console.log('Advanced options toggled:', state.advancedOptionsVisible);
     };
 
     // ========================================================================
@@ -374,13 +424,26 @@
     // ========================================================================
 
     const startPipelineRun = () => {
-        if (state.jobIsRunning) return;
-        if (!elements.formElement) return;
+        if (state.jobIsRunning) {
+            console.log('Pipeline already running, ignoring start request');
+            return;
+        }
+        if (!elements.formElement) {
+            console.error('Form element not found');
+            return;
+        }
 
         const dataSource = getSelectedDataSource();
         if (dataSource === 'uploaded' && (!state.stagedUpload || !state.metadataReady)) {
+            console.warn('Cannot start pipeline: upload not ready', {
+                hasUpload: !!state.stagedUpload,
+                metadataReady: state.metadataReady
+            });
+            showUploadSummary('⚠️ Please upload a file and wait for configuration to complete.', true);
             return;
         }
+
+        console.log('Starting pipeline run...', { dataSource, metadataReady: state.metadataReady });
 
         state.jobIsRunning = true;
         state.activeJobToken = null;
@@ -409,27 +472,46 @@
             .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
             .then(({ ok, payload }) => {
                 hideLoading();
-                if (!ok) throw payload;
+                if (!ok) {
+                    console.error('Pipeline start failed with payload:', payload);
+                    throw payload;
+                }
 
+                console.log('Pipeline started successfully:', payload.jobToken);
                 state.activeJobToken = payload.jobToken;
 
                 // Redirect to history page immediately
                 const historyUrl = '/history/';
+                console.log('Redirecting to history page...');
                 window.location.href = historyUrl;
             })
             .catch((error) => {
                 hideLoading();
-                console.error('Failed to start pipeline', error);
+                console.error('Failed to start pipeline:', error);
 
                 const messages = [];
                 if (error && error.errors) {
                     Object.keys(error.errors).forEach((key) => {
-                        error.errors[key].forEach((msg) => messages.push(msg));
+                        const fieldErrors = error.errors[key];
+                        if (Array.isArray(fieldErrors)) {
+                            fieldErrors.forEach((msg) => messages.push(`${key}: ${msg}`));
+                        } else {
+                            messages.push(`${key}: ${fieldErrors}`);
+                        }
                     });
                 }
 
-                const fallback = (error && (error.error || error.message)) || 'Failed to start pipeline.';
-                handleJobFailure(messages.length ? messages.join(' • ') : fallback);
+                let errorMsg = 'Failed to start pipeline.';
+                if (messages.length > 0) {
+                    errorMsg = messages.join(' • ');
+                } else if (error && error.error) {
+                    errorMsg = error.error;
+                } else if (error && error.message) {
+                    errorMsg = error.message;
+                }
+
+                console.error('Pipeline error message:', errorMsg);
+                handleJobFailure(errorMsg);
             });
     };
 
@@ -447,6 +529,9 @@
             elements.uploadSummary.hidden = true;
             elements.uploadSummary.textContent = '';
         }
+
+        // Hide basic mode status
+        hideBasicModeStatus();
 
         toggleVisibility(elements.metadataChoice, false);
         elements.finalizeButton.disabled = true;
@@ -642,7 +727,98 @@
             });
     };
 
+    const autoFinalizeMetadata = () => {
+        if (!state.stagedUpload || !state.stagedUpload.columns || !state.stagedUpload.columns.length) {
+            console.warn('Cannot auto-finalize: no staged upload or columns');
+            showUploadSummary('⚠️ Upload data missing. Please try uploading again.', true);
+            return;
+        }
+
+        console.log('Auto-finalizing metadata for uploaded CSV...');
+
+        // Use the inferred metadata from the upload
+        const columns = state.stagedUpload.columns.map((col) => ({
+            name: col.name,
+            kind: col.inferred_type || 'categorical',
+            representation: col.representation || (col.inferred_type === 'numerical' ? 'Float' : null),
+        }));
+
+        // Only set a primary key when explicitly inferred as an ID column.
+        const idColumn = state.stagedUpload.columns.find((col) => col.inferred_type === 'id');
+        const primaryKey = idColumn ? idColumn.name : null;
+
+        console.log(`Auto-finalize: ${columns.length} columns, primary key: ${primaryKey}`);
+
+        fetch(config.apiUrls.finalize, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': config.csrfToken || '',
+            },
+            body: JSON.stringify({
+                token: state.stagedUpload.token,
+                columns,
+                primaryKey,
+            }),
+        })
+            .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+            .then(({ ok, payload }) => {
+                if (!ok) {
+                    const errorMsg = payload.error || 'Auto-finalization failed';
+                    console.error('Auto-finalize error:', errorMsg);
+                    throw new Error(errorMsg);
+                }
+
+                console.log('Auto-finalize successful');
+                state.customMetadataDirty = false;
+                state.metadataReady = true;
+
+                // Show success in basic mode
+                showBasicModeStatus('✓ Ready to run! Using default settings: VAE=10 epochs, GNN=10 epochs, Diffusion=1 epoch', true);
+
+                // Also update advanced mode status (if visible)
+                elements.finalizeStatus.textContent = '✓ Ready to run pipeline with default settings.';
+                elements.finalizeStatus.dataset.state = 'saved';
+                elements.finalizeStatus.style.color = 'var(--success)';
+                setMetadataMode('custom');
+
+                showAdvanced();
+                updateRunButton();
+
+                console.log('Run button should now be enabled. State:', {
+                    metadataReady: state.metadataReady,
+                    runButtonDisabled: elements.runButton.disabled
+                });
+            })
+            .catch((error) => {
+                console.error('Auto-finalize failed:', error);
+                const errorMessage = error.message || 'Failed to prepare metadata';
+
+                // Show error to user in basic mode
+                showBasicModeStatus(`⚠️ Auto-configuration failed: ${errorMessage}`, false);
+                showUploadSummary(`⚠️ Auto-configuration failed: ${errorMessage}`, true);
+
+                // Also update advanced mode status
+                elements.finalizeStatus.textContent = `Error: ${errorMessage}`;
+                elements.finalizeStatus.style.color = 'var(--danger)';
+
+                // Keep metadata not ready so run button stays disabled
+                state.metadataReady = false;
+                updateRunButton();
+
+                // Provide option to use advanced mode
+                if (elements.toggleAdvancedButton) {
+                    elements.toggleAdvancedButton.style.fontWeight = '600';
+                    elements.toggleAdvancedButton.style.color = 'var(--accent)';
+                }
+            });
+    };
+
     const setMetadataMode = (value) => {
+        toArray(elements.metadataModeRadios).forEach((radio) => {
+            radio.checked = radio.value === value;
+        });
+
         if (value === 'template') {
             toggleVisibility(elements.metadataTemplatePanel, true);
             toggleVisibility(elements.metadataCustomPanel, false);
@@ -708,9 +884,14 @@
     // ========================================================================
 
     const handleFileUpload = async () => {
-        if (!elements.fileInput.files || !elements.fileInput.files.length) return;
+        if (!elements.fileInput.files || !elements.fileInput.files.length) {
+            console.warn('No file selected for upload');
+            return;
+        }
 
         const file = elements.fileInput.files[0];
+        console.log(`Starting file upload: ${file.name} (${file.size} bytes)`);
+
         if (!state.jobIsRunning) resetStatusPanel();
 
         const formData = new FormData();
@@ -718,9 +899,11 @@
 
         if (elements.datasetNameInput.value) {
             formData.append('datasetName', elements.datasetNameInput.value);
+            console.log(`Dataset name: ${elements.datasetNameInput.value}`);
         }
         if (elements.tableNameInput.value) {
             formData.append('tableName', elements.tableNameInput.value);
+            console.log(`Table name: ${elements.tableNameInput.value}`);
         }
 
         showUploadSummary('Uploading and profiling data...', false);
@@ -742,9 +925,19 @@
 
             hideLoading();
 
-            if (!response.ok) throw new Error('Upload failed');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+                console.error('Upload failed with status:', response.status, errorData);
+                throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+            }
 
             const payload = await response.json();
+            console.log('Upload successful:', {
+                token: payload.token,
+                rows: payload.rowCount,
+                columns: payload.columns ? payload.columns.length : 0
+            });
+
             state.stagedUpload = {
                 token: payload.token,
                 datasetName: payload.datasetName,
@@ -754,7 +947,7 @@
 
             elements.stagingTokenInput.value = state.stagedUpload.token;
             showUploadSummary(
-                `${payload.rowCount || 'Rows'} • ${payload.columns.length} columns`,
+                `✓ ${payload.rowCount || 'Rows'} rows • ${payload.columns.length} columns`,
                 false
             );
 
@@ -777,13 +970,18 @@
             }
 
             toggleVisibility(elements.metadataChoice, true);
-            setMetadataMode('template');
+            setMetadataMode('custom');
             updatePreview();
+
+            console.log('Calling auto-finalize metadata...');
+            // Auto-finalize metadata in Basic mode
+            autoFinalizeMetadata();
         } catch (error) {
             hideLoading();
-            console.error('Upload failed', error);
+            console.error('Upload failed:', error);
             clearUploadState();
-            showUploadSummary('Upload failed. Please verify the file and try again.', true);
+            const errorMsg = error.message || 'Upload failed. Please verify the file and try again.';
+            showUploadSummary(`⚠️ ${errorMsg}`, true);
         }
     };
 
@@ -1025,6 +1223,11 @@
             });
         }
 
+        // Advanced options toggle
+        if (elements.toggleAdvancedButton) {
+            elements.toggleAdvancedButton.addEventListener('click', toggleAdvancedOptions);
+        }
+
         // Cleanup on page unload
         window.addEventListener('beforeunload', stopStatusPoll);
     };
@@ -1038,12 +1241,26 @@
         attachEventListeners();
         resetStatusPanel();
         toggleStatusPlaceholder();
-        setDataSource(getSelectedDataSource());
-        setMetadataMode('template');
+
+        // Set uploaded as default data source
+        const uploadedRadio = document.querySelector('input[name="data_source"][value="uploaded"]');
+        if (uploadedRadio) {
+            uploadedRadio.checked = true;
+        }
+
+        // Initialize with advanced options hidden
+        state.advancedOptionsVisible = false;
+        if (elements.advancedOptionsContainer) {
+            elements.advancedOptionsContainer.hidden = true;
+        }
+
+        const initialDataSource = getSelectedDataSource();
+        setDataSource(initialDataSource);
+        setMetadataMode(initialDataSource === 'preloaded' ? 'template' : 'custom');
         updatePreview();
         updateRunButton();
 
-        console.log('TabGraphSyn upload interface initialized');
+        console.log('TabGraphSyn upload interface initialized - Basic mode');
     };
 
     // Run initialization when DOM is ready

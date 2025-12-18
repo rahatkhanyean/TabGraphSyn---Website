@@ -3,7 +3,7 @@
 git+https://github.com/martinjurkovic/syntherela.git
 # external requirements
 pymongo>=4.6
-numpy
+numpy<2
 pandas
 scikit-learn
 scipy
@@ -20,6 +20,7 @@ openpyxl
 torch_geometric==2.4.0
 xgboost
 seaborn
+umap-learn
 --find-links https://data.pyg.org/whl/torch-2.0.1+cu118.html
 --extra-index-url https://download.pytorch.org/whl/cu118
 

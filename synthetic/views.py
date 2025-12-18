@@ -4,6 +4,7 @@ import json
 import logging
 import shutil
 import threading
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -76,6 +77,18 @@ def _get_user_profile(request: HttpRequest) -> dict[str, Any]:
         'full_name': f'Anonymous User',
         'name': f'User-{user_id[:8]}',
     }
+
+
+def home_view(request: HttpRequest) -> HttpResponse:
+    """
+    Homepage view with YouTube video embed and CTA to start generating.
+    """
+    youtube_video_url = getattr(settings, 'YOUTUBE_VIDEO_URL', '')
+
+    context = {
+        'youtube_video_url': youtube_video_url,
+    }
+    return render(request, 'home.html', context)
 
 
 # Job preparation details captured before launching the pipeline.
@@ -279,6 +292,8 @@ def _prepare_run_spec(
 
 def _start_pipeline_job(prepared: PreparedRun) -> str:
     job_token = uuid4().hex
+    logger.info(f"Creating pipeline job {job_token} for {prepared.description}")
+
     job_tracker.create_job(job_token)
     job_tracker.set_stage(job_token, 'starting', f"Starting {prepared.description}")
 
@@ -288,6 +303,8 @@ def _start_pipeline_job(prepared: PreparedRun) -> str:
         daemon=True,
     )
     thread.start()
+    logger.info(f"Background thread started for job {job_token}")
+
     return job_token
 
 
@@ -296,24 +313,38 @@ def _run_pipeline_job(job_token: str, prepared: PreparedRun) -> None:
         job_tracker.append_log(job_token, line)
 
     try:
+        logger.info(f"[Job {job_token}] Starting pipeline execution")
         if prepared.started_at is None:
             prepared.started_at = timezone.now().isoformat()
+
         job_tracker.append_log(job_token, f"Launching pipeline for {prepared.description}")
+        logger.info(f"[Job {job_token}] Pipeline parameters: dataset={prepared.params.dataset}, table={prepared.params.table}, epochs_vae={prepared.params.epochs_vae}, epochs_gnn={prepared.params.epochs_gnn}, epochs_diff={prepared.params.epochs_diff}")
+
+        # Execute pipeline
         pipeline_result, run_token, generated_rows = _run_pipeline_and_capture(
             prepared.params, status_callback=_callback
         )
+        logger.info(f"[Job {job_token}] Pipeline execution completed. Generated {generated_rows} rows. Run token: {run_token}")
+
+        # Run evaluation
         extra_metadata = dict(prepared.extra_metadata)
         job_tracker.set_stage(job_token, 'evaluation')
         job_tracker.append_log(job_token, 'Running evaluation...')
+        logger.info(f"[Job {job_token}] Starting evaluation")
+
         evaluation_payload = evaluate_synthetic_run(
             dataset=prepared.params.dataset,
             table=prepared.params.table,
             synthetic_path=pipeline_result.output_csv,
         )
         extra_metadata['evaluation'] = evaluation_payload
+        logger.info(f"[Job {job_token}] Evaluation completed: {evaluation_payload.get('status', 'unknown')}")
+
+        # Save outputs
         job_tracker.set_stage(job_token, 'finalizing', 'Saving outputs')
         job_tracker.append_log(job_token, 'Saving outputs...')
         finished_at = timezone.now().isoformat()
+
         metadata_payload = _build_run_metadata(
             params=prepared.params,
             pipeline_result=pipeline_result,
@@ -325,6 +356,7 @@ def _run_pipeline_job(job_token: str, prepared: PreparedRun) -> None:
             started_at=prepared.started_at,
             finished_at=finished_at,
         )
+
         _persist_run(
             run_token,
             pipeline_result,
@@ -333,12 +365,25 @@ def _run_pipeline_job(job_token: str, prepared: PreparedRun) -> None:
             started_at=prepared.started_at,
             finished_at=finished_at,
         )
-        job_tracker.append_log(job_token, 'Pipeline run completed.')
+
+        logger.info(f"[Job {job_token}] Pipeline run completed successfully. Result token: {run_token}")
+        job_tracker.append_log(job_token, 'Pipeline run completed successfully!')
         job_tracker.set_result(job_token, run_token)
+
+    except PipelineError as exc:
+        error_msg = f"Pipeline execution failed: {str(exc)}"
+        logger.error(f"[Job {job_token}] {error_msg}")
+        logger.error(f"[Job {job_token}] Stack trace:\n{traceback.format_exc()}")
+        job_tracker.append_log(job_token, f'PIPELINE ERROR: {exc}')
+        job_tracker.set_error(job_token, error_msg)
+
     except Exception as exc:
+        error_msg = f"Unexpected error: {str(exc)}"
+        logger.error(f"[Job {job_token}] {error_msg}")
+        logger.error(f"[Job {job_token}] Stack trace:\n{traceback.format_exc()}")
         job_tracker.append_log(job_token, f'ERROR: {exc}')
-        job_tracker.set_error(job_token, str(exc))
-        traceback.print_exc()
+        job_tracker.append_log(job_token, 'Please check Django logs for detailed error information.')
+        job_tracker.set_error(job_token, error_msg)
 
 
 def upload_view(request: HttpRequest) -> HttpResponse:
@@ -487,6 +532,7 @@ def history_view(request: HttpRequest) -> HttpResponse:
 
 @require_POST
 def api_start_run(request: HttpRequest) -> JsonResponse:
+    logger.info("API: Start run request received")
     dataset_map = _dataset_table_map()
     dataset_choices = [(name, name) for name in dataset_map.keys()]
     metadata_templates = dataset_choices
@@ -499,7 +545,9 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     )
 
     if not form.is_valid():
-        return JsonResponse({'errors': _form_errors(form)}, status=400)
+        errors = _form_errors(form)
+        logger.warning(f"API: Form validation failed: {errors}")
+        return JsonResponse({'errors': errors}, status=400)
 
     epochs_vae = form.cleaned_data['epochs_vae']
     epochs_gnn = form.cleaned_data['epochs_gnn']
@@ -507,6 +555,8 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     enable_epoch_eval = form.cleaned_data.get('enable_epoch_eval', False)
     eval_frequency = form.cleaned_data.get('eval_frequency', 10)
     eval_samples = form.cleaned_data.get('eval_samples', 500)
+
+    logger.info(f"API: Preparing pipeline run with epochs (VAE={epochs_vae}, GNN={epochs_gnn}, Diff={epochs_diff})")
 
     prepared = _prepare_run_spec(
         form,
@@ -521,12 +571,24 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     )
 
     if not prepared:
-        return JsonResponse({'errors': _form_errors(form)}, status=400)
+        errors = _form_errors(form)
+        logger.error(f"API: Failed to prepare run spec: {errors}")
+        return JsonResponse({'errors': errors}, status=400)
+
+    logger.info(f"API: Run prepared successfully for dataset={prepared.params.dataset}, table={prepared.params.table}")
 
     owner_profile = _get_user_profile(request)
     prepared.owner = owner_profile
     prepared.started_at = timezone.now().isoformat()
-    job_token = _start_pipeline_job(prepared)
+
+    try:
+        job_token = _start_pipeline_job(prepared)
+        logger.info(f"API: Pipeline job started successfully with token {job_token}")
+    except Exception as exc:
+        error_msg = f"Failed to start pipeline job: {str(exc)}"
+        logger.error(f"API: {error_msg}")
+        logger.error(f"API: Stack trace:\n{traceback.format_exc()}")
+        return JsonResponse({'error': error_msg}, status=500)
 
     # Store the active job token in session so the history page can track it
     request.session['active_job_token'] = job_token
@@ -540,6 +602,8 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
         payload['logs'] = snap['logs']
         payload['error'] = snap['error']
         payload['resultToken'] = snap['resultToken']
+
+    logger.info(f"API: Returning success response for job {job_token}")
     return JsonResponse(payload, status=202)
 
 
@@ -758,17 +822,27 @@ def api_dataset_view(request: HttpRequest, token: str) -> JsonResponse:
 
 @require_POST
 def api_stage_upload(request: HttpRequest) -> JsonResponse:
+    logger.info("API: Stage upload request received")
     upload = request.FILES.get('dataset')
     if upload is None:
+        logger.warning("API: No dataset file provided in upload request")
         return JsonResponse({'error': 'No dataset provided.'}, status=400)
+
     dataset_name = request.POST.get('datasetName')
     table_name = request.POST.get('tableName')
+    logger.info(f"API: Uploading file '{upload.name}' (size: {upload.size} bytes, dataset: {dataset_name}, table: {table_name})")
+
     try:
         stage = stage_upload(upload, dataset_name=dataset_name, table_name=table_name)
+        logger.info(f"API: File staged successfully with token {stage.token}. Rows: {stage.profile['row_count']}, Columns: {len(stage.profile['columns'])}")
     except ValueError as exc:
+        logger.error(f"API: Upload validation error: {exc}")
         return JsonResponse({'error': str(exc)}, status=400)
-    except Exception:
-        return JsonResponse({'error': 'Failed to process uploaded file.'}, status=500)
+    except Exception as exc:
+        logger.error(f"API: Upload processing failed: {exc}")
+        logger.error(f"API: Stack trace:\n{traceback.format_exc()}")
+        return JsonResponse({'error': f'Failed to process uploaded file: {str(exc)}'}, status=500)
+
     payload = {
         'token': stage.token,
         'datasetName': stage.profile['dataset_name'],
@@ -779,18 +853,22 @@ def api_stage_upload(request: HttpRequest) -> JsonResponse:
         'columns': stage.profile['columns'],
         'sourceFilename': stage.profile['source_filename'],
     }
+    logger.info(f"API: Returning staged upload data for token {stage.token}")
     return JsonResponse(payload)
 
 
 @require_POST
 def api_finalize_metadata(request: HttpRequest) -> JsonResponse:
+    logger.info("API: Finalize metadata request received")
     try:
         payload = json.loads(request.body.decode('utf-8'))
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        logger.error(f"API: Invalid JSON in metadata finalization: {exc}")
         return JsonResponse({'error': 'Invalid JSON payload.'}, status=400)
 
     token = payload.get('token')
     if not token:
+        logger.warning("API: Metadata finalization called without token")
         return JsonResponse({'error': 'Missing upload token.'}, status=400)
 
     dataset_name = payload.get('datasetName')
@@ -798,10 +876,17 @@ def api_finalize_metadata(request: HttpRequest) -> JsonResponse:
     primary_key = payload.get('primaryKey')
     column_entries = payload.get('columns') or []
 
+    logger.info(f"API: Finalizing metadata for token {token}, dataset={dataset_name}, table={table_name}, primary_key={primary_key}, columns={len(column_entries)}")
+
     try:
         stage = update_stage_profile(token, dataset_name=dataset_name, table_name=table_name)
     except FileNotFoundError:
+        logger.error(f"API: Upload session not found for token {token}")
         return JsonResponse({'error': 'Upload session not found.'}, status=404)
+    except Exception as exc:
+        logger.error(f"API: Failed to update stage profile: {exc}")
+        logger.error(f"API: Stack trace:\n{traceback.format_exc()}")
+        return JsonResponse({'error': f'Failed to update profile: {str(exc)}'}, status=500)
 
     column_overrides: dict[str, dict[str, str]] = {}
     for entry in column_entries:
@@ -816,8 +901,15 @@ def api_finalize_metadata(request: HttpRequest) -> JsonResponse:
             override['representation'] = str(entry['representation'])
         column_overrides[str(name)] = override
 
-    metadata = build_metadata_from_profile(stage, primary_key=primary_key or None, column_overrides=column_overrides)
-    metadata_path = save_metadata(token, metadata)
+    try:
+        logger.info(f"API: Building metadata from profile with {len(column_overrides)} column overrides")
+        metadata = build_metadata_from_profile(stage, primary_key=primary_key or None, column_overrides=column_overrides)
+        metadata_path = save_metadata(token, metadata)
+        logger.info(f"API: Metadata saved successfully to {metadata_path}")
+    except Exception as exc:
+        logger.error(f"API: Failed to build or save metadata: {exc}")
+        logger.error(f"API: Stack trace:\n{traceback.format_exc()}")
+        return JsonResponse({'error': f'Failed to finalize metadata: {str(exc)}'}, status=500)
 
     response = {
         'metadataPath': str(metadata_path),
@@ -826,6 +918,7 @@ def api_finalize_metadata(request: HttpRequest) -> JsonResponse:
         'displayDatasetName': stage.profile.get('display_dataset_name'),
         'displayTableName': stage.profile.get('display_table_name'),
     }
+    logger.info(f"API: Metadata finalization successful for token {token}")
     return JsonResponse(response)
 
 

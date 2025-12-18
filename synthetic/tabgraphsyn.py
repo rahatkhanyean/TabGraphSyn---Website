@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -121,8 +122,15 @@ def _python_command(script: Path, *arguments: str) -> list[str]:
     return cmd
 
 
-def _safe_component(value: str) -> str:
-    return ''.join(char if char.isalnum() or char in {'-', '_'} else '_' for char in value)
+def _safe_component(value: str, max_length: int = 48) -> str:
+    safe = ''.join(char if char.isalnum() or char in {'-', '_'} else '_' for char in value)
+    if len(safe) <= max_length:
+        return safe
+    digest = hashlib.sha1(safe.encode('utf-8')).hexdigest()[:8]
+    keep = max_length - 9
+    if keep < 1:
+        return digest
+    return f"{safe[:keep]}_{digest}"
 
 
 def run_pipeline(

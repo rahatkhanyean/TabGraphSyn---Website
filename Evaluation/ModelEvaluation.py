@@ -22,7 +22,10 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, average_pre
 from scipy.stats import pearsonr, wasserstein_distance, ks_2samp
 import matplotlib.pyplot as plt
 import seaborn as sns
-from dython.nominal import associations
+try:
+    from dython.nominal import associations
+except ImportError:
+    associations = None
 
 
 class models_evaluator:
@@ -676,6 +679,8 @@ class models_evaluator:
     '''
 
     def correlation_pairwise_comb(self, train_set = None, categorical_cols = [], syn_output = {}):
+        if associations is None:
+            raise ImportError("dython is required for correlation_pairwise_comb")
 
         fn_dict = {}
 
@@ -855,4 +860,3 @@ class models_evaluator:
 
         # print("black_box attacks")
         # print(fbb_attacks)
-
