@@ -28,6 +28,29 @@
         <form method="post" enctype="multipart/form-data" class="journey-form">
             {% csrf_token %}
             {{ form.staging_token }}
+            <section class="journey-step" data-step="00">
+                <div class="journey-step-header">
+                    <span class="journey-step-index">00</span>
+                    <div>
+                        <h2 class="journey-step-title">Choose your mode</h2>
+                        <p class="journey-step-copy">Basic skips manual metadata edits and uses default training epochs. Advanced keeps the full step-by-step controls.</p>
+                    </div>
+                </div>
+                <div class="journey-step-body">
+                    <section class="card-section">
+                        <div class="radio-stack" id="experience-options">
+                            {% for radio in form.experience_level %}
+                                <label class="radio-option">
+                                    {{ radio.tag }}
+                                    <section class="info">{{ radio.choice_label }}</section>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        {% if form.experience_level.errors %}<ul class="errorlist">{% for error in form.experience_level.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                        <p class="inline-hint">You can switch modes anytime—Basic prioritizes speed, while Advanced exposes metadata and epoch tuning.</p>
+                    </section>
+                </div>
+            </section>
             <div class="journey-flow">
                 <section class="journey-step" data-step="01">
                     <div class="journey-step-header">
@@ -246,6 +269,7 @@
             <div class="tips-card">
                 <h3>Quick tips</h3>
                 <ul>
+                    <li>Basic mode automatically infers metadata and applies default epochs so you can run in one click.</li>
                     <li>Uploading a CSV automatically profiles column kinds and suggested representations.</li>
                     <li>Finalize custom metadata to unlock advanced configuration for the uploaded dataset.</li>
                     <li>Keep the page open once running so the monitor can poll and redirect on completion.</li>
