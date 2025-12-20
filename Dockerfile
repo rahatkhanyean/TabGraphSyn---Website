@@ -1,46 +1,60 @@
-# Use Python 3.11 slim image as base
-FROM python:3.11-slim
+# Use NVIDIA CUDA base image for GPU support
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    DEBIAN_FRONTEND=noninteractive \
+    PATH="/opt/venv/bin:$PATH"
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-venv \
+    python3-pip \
+    nginx \
+    supervisor \
     git \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set work directory
+# Create and activate virtual environment
+RUN python3.10 -m venv /opt/venv
+
+# Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Copy requirements files
+COPY requirements-web.txt requirements.txt ./
 
 # Install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install django gunicorn && \
-    pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-web.txt && \
+    pip install --no-cache-dir gunicorn && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p media staticfiles
+RUN mkdir -p /app/staticfiles /app/media /app/logs
 
 # Collect static files
 RUN python manage.py collectstatic --noinput || true
 
-# Create a non-root user
-RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+# Copy nginx configuration
+COPY deploy/nginx.conf /etc/nginx/sites-available/default
 
-USER appuser
+# Copy supervisor configuration
+COPY deploy/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Expose port
-EXPOSE 8000
+# Expose ports
+EXPOSE 80 443
 
-# Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "tabgraphsyn_site.wsgi:application"]
+# Create entrypoint script
+COPY deploy/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Run entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,48 +1,21 @@
-// Interactive features for the result page
+// Interactive features for the result page (no page scroll layout)
 
 let umapData = null;
 let currentHoveredRow = null;
 let allDataRows = [];
 let allHeaders = [];
 let selectedHeaders = [];
-let currentDisplayMode = 'all'; // start with full dataset once loaded
+let currentDisplayMode = 'all';
+const PREVIEW_ROW_COUNT = 20;
+let statsSelectedColumn = null;
+let rowSearchQuery = '';
 
-// Helper to parse embedded JSON safely
-function parseJsonScript(id) {
-    const el = document.getElementById(id);
-    if (!el) return null;
-    try {
-        return JSON.parse(el.textContent);
-    } catch (err) {
-        console.warn(`Failed to parse JSON script ${id}`, err);
-        return null;
-    }
-}
-
-// Fallback: extract headers/rows from the server-rendered table if JSON data is unavailable
-function captureTableFromDom() {
-    const table = document.querySelector('.data-preview-table');
-    if (!table) return { headers: [], rows: [] };
-
-    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
-    const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
-        return Array.from(tr.querySelectorAll('td')).map(td => td.textContent);
-    });
-    return { headers, rows };
-}
-
-// Initialize interactive UMAP plot with Plotly
-function initializeInteractiveUMAP(umapCoordinates, labels) {
-    if (!umapCoordinates || umapCoordinates.length === 0) {
-        console.warn('No UMAP coordinates available for interactive plot');
-        return;
-    }
-
+function initializeInteractiveUMAP(umapCoordinates) {
+    if (!umapCoordinates || umapCoordinates.length === 0) return;
     umapData = umapCoordinates;
 
-    // Separate real and synthetic data points
-    const realPoints = umapCoordinates.filter(point => point.type === 'real');
-    const syntheticPoints = umapCoordinates.filter(point => point.type === 'synthetic');
+    const realPoints = umapCoordinates.filter(p => p.type === 'real');
+    const syntheticPoints = umapCoordinates.filter(p => p.type === 'synthetic');
 
     const realTrace = {
         x: realPoints.map(p => p.x),
@@ -50,15 +23,7 @@ function initializeInteractiveUMAP(umapCoordinates, labels) {
         mode: 'markers',
         type: 'scatter',
         name: 'Real Data',
-        marker: {
-            color: '#3b82f6',
-            size: 8,
-            opacity: 0.6,
-            line: {
-                color: '#1e40af',
-                width: 1
-            }
-        },
+        marker: { color: '#3b82f6', size: 8, opacity: 0.6, line: { color: '#1e40af', width: 1 } },
         hovertemplate: '<b>Real Data</b><br>Index: %{customdata}<br>x: %{x:.3f}<br>y: %{y:.3f}<extra></extra>',
         customdata: realPoints.map(p => p.index)
     };
@@ -69,83 +34,63 @@ function initializeInteractiveUMAP(umapCoordinates, labels) {
         mode: 'markers',
         type: 'scatter',
         name: 'Synthetic Data',
-        marker: {
-            color: '#22c55e',
-            size: 8,
-            opacity: 0.6,
-            line: {
-                color: '#15803d',
-                width: 1
-            }
-        },
+        marker: { color: '#22c55e', size: 8, opacity: 0.6, line: { color: '#15803d', width: 1 } },
         hovertemplate: '<b>Synthetic Data</b><br>Row: %{customdata}<br>x: %{x:.3f}<br>y: %{y:.3f}<extra></extra>',
         customdata: syntheticPoints.map(p => p.index),
         ids: syntheticPoints.map(p => `synthetic-${p.index}`)
     };
 
+    const plotDiv = document.getElementById('interactive-umap-plot');
     const layout = {
-        title: {
-            text: 'UMAP Projection - Real vs Synthetic Data',
-            font: {
-                family: 'Inter, sans-serif',
-                size: 18,
-                weight: 600
-            }
-        },
+        autosize: true,
         xaxis: {
-            title: 'UMAP Dimension 1',
+            title: { text: 'UMAP Dimension 1', standoff: 12, font: { size: 12, family: 'Inter, sans-serif', color: '#475569' } },
+            tickfont: { size: 11, family: 'Inter, sans-serif', color: '#475569' },
             gridcolor: 'rgba(148, 163, 184, 0.1)',
-            zeroline: false
+            zeroline: false,
+            automargin: true
         },
         yaxis: {
-            title: 'UMAP Dimension 2',
+            title: { text: 'UMAP Dimension 2', standoff: 10, font: { size: 12, family: 'Inter, sans-serif', color: '#475569' } },
+            tickfont: { size: 11, family: 'Inter, sans-serif', color: '#475569' },
             gridcolor: 'rgba(148, 163, 184, 0.1)',
-            zeroline: false
+            zeroline: false,
+            automargin: true
         },
         hovermode: 'closest',
         showlegend: true,
         legend: {
-            x: 1,
-            xanchor: 'right',
-            y: 1,
-            bgcolor: 'rgba(255, 255, 255, 0.9)',
-            bordercolor: 'rgba(148, 163, 184, 0.3)',
-            borderwidth: 1
+            orientation: 'h',
+            x: 0.5,
+            xanchor: 'center',
+            y: 1.12,
+            yanchor: 'bottom',
+            bgcolor: 'rgba(255,255,255,0.95)',
+            bordercolor: 'rgba(148,163,184,0.3)',
+            borderwidth: 1,
+            font: { size: 11, family: 'Inter, sans-serif', color: '#334155' }
         },
         plot_bgcolor: '#ffffff',
         paper_bgcolor: '#ffffff',
-        margin: {
-            l: 60,
-            r: 20,
-            t: 60,
-            b: 60
-        }
+        margin: { l: 48, r: 24, t: 56, b: 48 }
     };
 
-    const config = {
-        responsive: true,
-        displayModeBar: true,
-        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-        displaylogo: false
-    };
+    const config = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d', 'select2d'], displaylogo: false };
 
-    const plotDiv = document.getElementById('interactive-umap-plot');
     if (plotDiv) {
         Plotly.newPlot(plotDiv, [realTrace, syntheticTrace], layout, config);
+        requestAnimationFrame(() => Plotly.Plots.resize(plotDiv));
+        if (!plotDiv.dataset.resizeBound) {
+            plotDiv.dataset.resizeBound = 'true';
+            window.addEventListener('resize', () => Plotly.Plots.resize(plotDiv));
+        }
     }
 }
 
-// Highlight a specific point in the UMAP plot
 function highlightUMAPPoint(rowIndex) {
-    if (!umapData || rowIndex === null) {
-        return;
-    }
-
+    if (!umapData || rowIndex === null) return;
     const syntheticPoint = umapData.find(p => p.type === 'synthetic' && p.index === rowIndex);
-
-    if (!syntheticPoint) {
-        return;
-    }
+    if (!syntheticPoint) return;
 
     const highlightTrace = {
         x: [syntheticPoint.x],
@@ -153,16 +98,7 @@ function highlightUMAPPoint(rowIndex) {
         mode: 'markers',
         type: 'scatter',
         name: 'Highlighted',
-        marker: {
-            color: '#f59e0b',
-            size: 16,
-            opacity: 1,
-            line: {
-                color: '#d97706',
-                width: 3
-            },
-            symbol: 'star'
-        },
+        marker: { color: '#f59e0b', size: 16, opacity: 1, line: { color: '#d97706', width: 3 }, symbol: 'star' },
         hovertemplate: '<b>Highlighted Row</b><br>Row: %{customdata}<br>x: %{x:.3f}<br>y: %{y:.3f}<extra></extra>',
         customdata: [rowIndex],
         showlegend: false
@@ -170,16 +106,13 @@ function highlightUMAPPoint(rowIndex) {
 
     const plotDiv = document.getElementById('interactive-umap-plot');
     if (plotDiv && plotDiv.data) {
-        // Remove previous highlight (trace index 2 if exists)
         if (plotDiv.data.length > 2) {
             Plotly.deleteTraces(plotDiv, 2);
         }
-        // Add new highlight
         Plotly.addTraces(plotDiv, highlightTrace);
     }
 }
 
-// Remove highlight from UMAP plot
 function removeUMAPHighlight() {
     const plotDiv = document.getElementById('interactive-umap-plot');
     if (plotDiv && plotDiv.data && plotDiv.data.length > 2) {
@@ -187,25 +120,20 @@ function removeUMAPHighlight() {
     }
 }
 
-// Attach hover event listeners to table rows
 function attachTableHoverListeners() {
     const tableBody = document.querySelector('.data-preview-table tbody');
     if (!tableBody) return;
 
     const rows = tableBody.querySelectorAll('tr');
     rows.forEach((row, index) => {
-        if (!row.hasAttribute('data-row-index')) {
-            row.setAttribute('data-row-index', index);
-        }
-        row.addEventListener('mouseenter', function() {
-            const rowIndexAttr = this.getAttribute('data-row-index');
-            const dataIndex = rowIndexAttr !== null ? parseInt(rowIndexAttr, 10) : index;
-            currentHoveredRow = dataIndex;
+        if (!row.hasAttribute('data-row-index')) row.setAttribute('data-row-index', index);
+        row.addEventListener('mouseenter', function () {
+            const idx = Number(this.getAttribute('data-row-index'));
+            currentHoveredRow = idx;
             this.classList.add('row-highlighted');
-            highlightUMAPPoint(dataIndex);
+            highlightUMAPPoint(idx);
         });
-
-        row.addEventListener('mouseleave', function() {
+        row.addEventListener('mouseleave', function () {
             currentHoveredRow = null;
             this.classList.remove('row-highlighted');
             removeUMAPHighlight();
@@ -213,77 +141,168 @@ function attachTableHoverListeners() {
     });
 }
 
-// Toggle between preview (20 rows) and all data view
 function toggleDataView() {
-    const tableBody = document.querySelector('.data-preview-table tbody');
     const toggleButton = document.getElementById('toggle-data-view');
+    if (!toggleButton) return;
 
-    if (!tableBody || !toggleButton) return;
-
-    if (currentDisplayMode === 'preview') {
-        // Show all data
-        currentDisplayMode = 'all';
-        toggleButton.textContent = 'Show Preview (20 rows)';
-        toggleButton.innerHTML = '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
-    } else {
-        // Show preview only
-        currentDisplayMode = 'preview';
-        toggleButton.innerHTML = '<i class="fa-solid fa-expand"></i> View All Data';
-    }
+    currentDisplayMode = currentDisplayMode === 'preview' ? 'all' : 'preview';
+    toggleButton.innerHTML = currentDisplayMode === 'preview'
+        ? '<i class="fa-solid fa-expand"></i> View all rows'
+        : '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
 
     renderCurrentView();
 }
 
-// Render all data rows in the table
-function renderAllData() {
+function renderRows(rows, offset, rowIndexes = null) {
     const tableBody = document.querySelector('.data-preview-table tbody');
-    if (!tableBody || !allDataRows || allDataRows.length === 0) return;
+    if (!tableBody) return;
+    const columnIndexes = getSelectedColumnIndexes();
+    const headersToRender = columnIndexes.length ? columnIndexes.map(idx => allHeaders[idx]) : allHeaders;
+    tableBody.innerHTML = '';
 
+    updateTableHeader(headersToRender);
+
+    if (!rows.length) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.className = 'loading-row';
+        td.textContent = 'No matching rows.';
+        td.colSpan = headersToRender.length || 1;
+        tr.appendChild(td);
+        tableBody.appendChild(tr);
+        return;
+    }
+
+    rows.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        const rowIndex = rowIndexes ? rowIndexes[idx] : offset + idx;
+        tr.setAttribute('data-row-index', rowIndex);
+        const source = columnIndexes.length ? columnIndexes : null;
+        const cells = source ? source.map(ci => row[ci]) : row;
+        cells.forEach(cell => {
+            const td = document.createElement('td');
+            td.textContent = cell;
+            tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+    });
+}
+
+function renderAllData() {
+    if (!allDataRows.length) return;
     renderRows(allDataRows, 0);
 }
 
-// Render preview data (first 20 rows)
 function renderPreviewData() {
-    const tableBody = document.querySelector('.data-preview-table tbody');
-    if (!tableBody || !allDataRows || allDataRows.length === 0) return;
-
-    renderRows(allDataRows.slice(0, 20), 0);
+    if (!allDataRows.length) return;
+    renderRows(allDataRows.slice(0, PREVIEW_ROW_COUNT), 0);
 }
 
-// Update the row count display
-function updateRowCountDisplay() {
-    const cardTitle = document.querySelector('.data-card .card-title');
-    if (!cardTitle) return;
+function updateRowCountDisplay(displayedRows = null, totalRowsOverride = null, isFiltered = false) {
+    const totalRows = totalRowsOverride ?? allDataRows.length;
+    const displayed = displayedRows ?? (currentDisplayMode === 'preview' ? Math.min(PREVIEW_ROW_COUNT, totalRows) : totalRows);
+    const selectedColumns = getSelectedColumnIndexes();
+    const selectedCount = selectedColumns.length || allHeaders.length;
 
-    const totalRows = allDataRows.length;
-    const displayedRows = currentDisplayMode === 'preview' ? Math.min(20, totalRows) : totalRows;
+    const modeLabel = document.getElementById('data-mode-label');
+    const rowCount = document.getElementById('data-row-count');
+    const rowTotal = document.getElementById('data-row-total');
+    const columnCount = document.getElementById('data-column-count');
 
-    if (currentDisplayMode === 'preview' && totalRows > 20) {
-        cardTitle.innerHTML = `Preview (showing ${displayedRows} of ${totalRows} rows)`;
-    } else {
-        cardTitle.innerHTML = `Data (${displayedRows} rows)`;
+    if (modeLabel) {
+        if (isFiltered) {
+            modeLabel.textContent = 'Filtered view';
+        } else {
+            modeLabel.textContent = currentDisplayMode === 'preview' && totalRows > PREVIEW_ROW_COUNT ? 'Preview view' : 'Full dataset';
+        }
     }
+    if (rowCount) rowCount.textContent = displayed;
+    if (rowTotal) rowTotal.textContent = totalRows;
+    if (columnCount) columnCount.textContent = selectedCount;
 }
 
-// Re-render current view (preview or all) with selected columns
 function renderCurrentView() {
-    if (!allDataRows || allDataRows.length === 0) return;
-
-    if (currentDisplayMode === 'preview') {
-        renderPreviewData();
+    if (!allDataRows.length) return;
+    const search = rowSearchQuery.trim().toLowerCase();
+    if (search) {
+        const columnIndexes = getSelectedColumnIndexes();
+        const searchIndexes = columnIndexes.length ? columnIndexes : allHeaders.map((_, idx) => idx);
+        const matches = [];
+        const matchIndexes = [];
+        allDataRows.forEach((row, idx) => {
+            const hit = searchIndexes.some(ci => String(row[ci] ?? '').toLowerCase().includes(search));
+            if (hit) {
+                matches.push(row);
+                matchIndexes.push(idx);
+            }
+        });
+        const limitedRows = matches.slice(0, PREVIEW_ROW_COUNT);
+        const limitedIndexes = matchIndexes.slice(0, PREVIEW_ROW_COUNT);
+        renderRows(limitedRows, 0, limitedIndexes);
+        updateRowCountDisplay(limitedRows.length, matches.length, true);
     } else {
-        renderAllData();
+        if (currentDisplayMode === 'preview') renderPreviewData(); else renderAllData();
+        updateRowCountDisplay();
     }
-
-    updateRowCountDisplay();
     attachTableHoverListeners();
 }
 
-// Build table header to match selected columns
+function initMetricTooltips() {
+    const triggers = Array.from(document.querySelectorAll('.metric-help'));
+    if (!triggers.length) return;
+
+    const closeAll = (except = null) => {
+        document.querySelectorAll('.metric-help.is-open').forEach((el) => {
+            if (except && el === except) return;
+            el.classList.remove('is-open');
+            el.setAttribute('aria-expanded', 'false');
+        });
+    };
+
+    const toggleTooltip = (trigger) => {
+        const isOpen = trigger.classList.contains('is-open');
+        closeAll(trigger);
+        if (isOpen) {
+            trigger.classList.remove('is-open');
+            trigger.setAttribute('aria-expanded', 'false');
+        } else {
+            trigger.classList.add('is-open');
+            trigger.setAttribute('aria-expanded', 'true');
+        }
+    };
+
+    triggers.forEach((el) => {
+        if (!el.hasAttribute('aria-expanded')) el.setAttribute('aria-expanded', 'false');
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleTooltip(el);
+        });
+        el.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            toggleTooltip(el);
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        if (!target) return;
+        if (target.closest('.metric-tooltip')) return;
+        if (!target.closest('.metric-help')) closeAll();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeAll();
+            return;
+        }
+    });
+}
+
 function updateTableHeader(headersToRender) {
     const headerRow = document.querySelector('.data-preview-table thead tr');
     if (!headerRow) return;
-
     headerRow.innerHTML = '';
     headersToRender.forEach(header => {
         const th = document.createElement('th');
@@ -292,111 +311,169 @@ function updateTableHeader(headersToRender) {
     });
 }
 
-// Determine column indexes to render based on selected headers
 function getSelectedColumnIndexes() {
-    if (!allHeaders || allHeaders.length === 0) return [];
-    if (!selectedHeaders || selectedHeaders.length === 0) return allHeaders.map((_, idx) => idx);
-    return selectedHeaders
-        .map(header => allHeaders.indexOf(header))
-        .filter(index => index >= 0);
+    if (!allHeaders.length) return [];
+    if (!selectedHeaders.length) return allHeaders.map((_, idx) => idx);
+    return selectedHeaders.map(h => allHeaders.indexOf(h)).filter(idx => idx >= 0);
 }
 
-// Generic row renderer honoring selected columns and preserving original row index
-function renderRows(rows, offset) {
-    const tableBody = document.querySelector('.data-preview-table tbody');
-    if (!tableBody) return;
-
-    const columnIndexes = getSelectedColumnIndexes();
-    const headersToRender = columnIndexes.length ? columnIndexes.map(idx => allHeaders[idx]) : allHeaders;
-    tableBody.innerHTML = '';
-
-    rows.forEach((row, idx) => {
-        const tr = document.createElement('tr');
-        tr.setAttribute('data-row-index', offset + idx);
-
-        if (columnIndexes.length === 0) {
-            row.forEach(cell => {
-                const td = document.createElement('td');
-                td.textContent = cell;
-                tr.appendChild(td);
-            });
-        } else {
-            columnIndexes.forEach(colIdx => {
-                const td = document.createElement('td');
-                td.textContent = row[colIdx];
-                tr.appendChild(td);
-            });
-        }
-        tableBody.appendChild(tr);
-    });
-
-    updateTableHeader(headersToRender);
-}
-
-// Populate the column selector dropdown
 function populateColumnSelector(headers) {
     const selector = document.getElementById('column-selector');
-    if (!selector || !headers || headers.length === 0) return;
-
+    if (!selector || !headers.length) return;
     selector.innerHTML = '';
     headers.forEach(header => {
         const option = document.createElement('option');
         option.value = header;
         option.textContent = header;
         option.selected = selectedHeaders.length === 0 || selectedHeaders.includes(header);
+        option.hidden = false;
         selector.appendChild(option);
     });
 }
 
-// Load full dataset via API
+function filterColumnOptions(query) {
+    const selector = document.getElementById('column-selector');
+    if (!selector) return;
+    const search = query.trim().toLowerCase();
+    Array.from(selector.options).forEach(option => {
+        option.hidden = search ? !option.value.toLowerCase().includes(search) : false;
+    });
+}
+
+function resetColumnSelection() {
+    if (!allHeaders.length) return;
+    selectedHeaders = [...allHeaders];
+    populateColumnSelector(allHeaders);
+    renderCurrentView();
+    const columnSearch = document.getElementById('column-search');
+    if (columnSearch) {
+        columnSearch.value = '';
+        filterColumnOptions('');
+    }
+}
+
+function isNumericColumn(index) {
+    if (!allDataRows.length) return false;
+    for (let i = 0; i < Math.min(allDataRows.length, 30); i++) {
+        const num = Number(allDataRows[i][index]);
+        if (!Number.isFinite(num)) return false;
+    }
+    return true;
+}
+
+function computeStatsForColumn(index) {
+    if (index == null || index < 0) return null;
+    const values = [];
+    const uniques = new Set();
+    allDataRows.forEach(row => {
+        const raw = row[index];
+        if (raw === '' || raw === null || raw === undefined) return;
+        const num = Number(raw);
+        if (Number.isFinite(num)) {
+            values.push(num);
+            uniques.add(raw);
+        } else {
+            uniques.add(raw);
+        }
+    });
+    if (!values.length) {
+        return { count: 0, unique: uniques.size, min: '-', max: '-', mean: '-', std: '-' };
+    }
+    const count = values.length;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const mean = values.reduce((a, b) => a + b, 0) / count;
+    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / count;
+    const std = Math.sqrt(variance);
+    return { count, unique: uniques.size, min, max, mean, std };
+}
+
+function updateStatsUI(stats) {
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    const fmt = (v) => typeof v === 'number' ? Number(v).toFixed(4).replace(/\.?0+$/, '') : v;
+    setText('stat-count', stats?.count ?? '-');
+    setText('stat-unique', stats?.unique ?? '-');
+    setText('stat-min', stats ? fmt(stats.min) : '-');
+    setText('stat-max', stats ? fmt(stats.max) : '-');
+    setText('stat-mean', stats ? fmt(stats.mean) : '-');
+    setText('stat-std', stats ? fmt(stats.std) : '-');
+}
+
+function selectStatsColumnByIndex(idx) {
+    if (idx == null || idx < 0) return;
+    statsSelectedColumn = idx;
+    const selector = document.getElementById('stats-column-selector');
+    if (selector) selector.value = allHeaders[idx];
+    const stats = computeStatsForColumn(idx);
+    updateStatsUI(stats);
+}
+
+function initStatsSelector() {
+    const selector = document.getElementById('stats-column-selector');
+    if (!selector) return;
+    selector.innerHTML = '';
+    allHeaders.forEach((header, index) => {
+        const option = document.createElement('option');
+        option.value = header;
+        option.textContent = header;
+        selector.appendChild(option);
+    });
+    let defaultIdx = allHeaders.findIndex((_, idx) => isNumericColumn(idx));
+    if (defaultIdx === -1) defaultIdx = 0;
+    selectStatsColumnByIndex(defaultIdx);
+    selector.addEventListener('change', (e) => {
+        const header = e.target.value;
+        const idx = allHeaders.indexOf(header);
+        if (idx >= 0) selectStatsColumnByIndex(idx);
+    });
+}
+
 async function loadFullDataset(token) {
     try {
         const response = await fetch(`/api/dataset/${token}/`);
-        if (!response.ok) {
-            throw new Error('Failed to load full dataset');
-        }
+        if (!response.ok) throw new Error('Failed to load full dataset');
         const data = await response.json();
         allHeaders = data.headers || allHeaders;
         selectedHeaders = selectedHeaders.length ? selectedHeaders.filter(h => allHeaders.includes(h)) : [...allHeaders];
         allDataRows = data.rows;
+        currentDisplayMode = allDataRows.length > PREVIEW_ROW_COUNT ? 'preview' : 'all';
 
-        // Enable the toggle button
         const toggleButton = document.getElementById('toggle-data-view');
         if (toggleButton) {
             toggleButton.disabled = false;
             toggleButton.style.display = 'inline-flex';
-            toggleButton.innerHTML = '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
+            toggleButton.innerHTML = currentDisplayMode === 'preview'
+                ? '<i class="fa-solid fa-expand"></i> View all rows'
+                : '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
         }
 
         populateColumnSelector(allHeaders);
-        currentDisplayMode = 'all';
         renderCurrentView();
+        initStatsSelector();
     } catch (error) {
         console.error('Error loading full dataset:', error);
         const tableBody = document.querySelector('.data-preview-table tbody');
-        if (tableBody) {
+        if (tableBody && tableBody.querySelectorAll('tr').length === 0) {
             tableBody.innerHTML = '<tr><td class="loading-row">Failed to load dataset.</td></tr>';
         }
     }
 }
 
-// Initialize everything when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    // Check if we're on the result page
-    const resultPage = document.querySelector('.result-layout');
+document.addEventListener('DOMContentLoaded', function () {
+    const resultPage = document.querySelector('.result-viewport');
     if (!resultPage) return;
 
-    // Initial placeholder while full dataset loads
     const tableBody = document.querySelector('.data-preview-table tbody');
-    if (tableBody) {
-        tableBody.innerHTML = '<tr><td class="loading-row">Loading full dataset…</td></tr>';
+    if (tableBody && tableBody.children.length === 0) {
+        tableBody.innerHTML = '<tr><td class="loading-row">Loading full dataset.</td></tr>';
     }
 
-    // Get the run token from the page
     const tokenElement = document.querySelector('[data-run-token]');
     const runToken = tokenElement ? tokenElement.getAttribute('data-run-token') : null;
 
-    // Load UMAP data if available
     const umapDataElement = document.getElementById('umap-data');
     if (umapDataElement) {
         try {
@@ -407,22 +484,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Attach hover listeners to table rows
     attachTableHoverListeners();
+    if (runToken) loadFullDataset(runToken);
 
-    // Load full dataset for "View All" functionality
-    if (runToken) {
-        loadFullDataset(runToken);
-    }
-
-    // Attach click handler to toggle button
     const toggleButton = document.getElementById('toggle-data-view');
     if (toggleButton) {
         toggleButton.style.display = 'inline-flex';
         toggleButton.addEventListener('click', toggleDataView);
     }
 
-    // Column selector change handler
     const columnSelector = document.getElementById('column-selector');
     if (columnSelector) {
         columnSelector.addEventListener('change', () => {
@@ -431,4 +501,43 @@ document.addEventListener('DOMContentLoaded', function() {
             renderCurrentView();
         });
     }
+
+    const columnSearch = document.getElementById('column-search');
+    if (columnSearch) {
+        columnSearch.addEventListener('input', (event) => filterColumnOptions(event.target.value));
+    }
+
+    const rowSearch = document.getElementById('row-search');
+    if (rowSearch) {
+        rowSearch.addEventListener('input', (event) => {
+            rowSearchQuery = event.target.value || '';
+            renderCurrentView();
+        });
+    }
+
+    const resetColumnsButton = document.getElementById('reset-columns');
+    if (resetColumnsButton) {
+        resetColumnsButton.addEventListener('click', resetColumnSelection);
+    }
+
+    initMetricTooltips();
+
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-button').forEach(b => {
+                b.classList.remove('active');
+                b.setAttribute('aria-selected', 'false');
+                b.setAttribute('tabindex', '-1');
+            });
+            btn.classList.add('active');
+            btn.setAttribute('aria-selected', 'true');
+            btn.setAttribute('tabindex', '0');
+            const tab = btn.getAttribute('data-tab');
+            document.querySelectorAll('[data-tab-panel]').forEach(panel => {
+                const isActive = panel.getAttribute('data-tab-panel') === tab;
+                panel.classList.toggle('hidden', !isActive);
+                panel.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+            });
+        });
+    });
 });

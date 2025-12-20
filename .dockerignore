@@ -37,9 +37,7 @@ Thumbs.db
 .git/
 .gitignore
 
-# Docker
-Dockerfile
-docker-compose.yml
+# Docker (exclude from context, but Dockerfile and deploy/ are needed)
 .dockerignore
 
 # Environment variables
@@ -59,3 +57,14 @@ npm-debug.log
 *.tmp
 *.bak
 *.cache
+
+# Project specific (large files/directories)
+src/ckpt/*
+src/data/original/*
+src/data/processed/*
+src/data/synthetic/*
+Someplots/
+eval_func.txt
+nul
+*.pdf
+*.png

@@ -32,10 +32,15 @@ class Command(BaseCommand):
 
         roles = [role.strip() for role in options['roles'].split(',') if role.strip()]
         now = timezone.now().isoformat()
+        email = (options.get('email') or '').strip()
+        email_lower = email.lower() if email else None
         payload = {
             'username': username,
             'password': make_password(password),
-            'email': options.get('email') or None,
+            'email': email or None,
+            'email_lower': email_lower,
+            'email_verified': bool(email_lower),
+            'auth_provider': 'password',
             'full_name': options.get('full_name') or username,
             'roles': roles,
             'updated_at': now,

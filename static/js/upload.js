@@ -539,8 +539,8 @@
         elements.finalizeStatus.textContent = '';
         elements.finalizeStatus.dataset.state = '';
         elements.columnTableBody.innerHTML = '';
-        elements.datasetNameInput.value = '';
-        elements.tableNameInput.value = '';
+        if (elements.datasetNameInput) elements.datasetNameInput.value = '';
+        if (elements.tableNameInput) elements.tableNameInput.value = '';
         state.currentTable = null;
         hideAdvanced();
         if (elements.metadataReminder) elements.metadataReminder.hidden = true;
@@ -897,11 +897,11 @@
         const formData = new FormData();
         formData.append('dataset', file);
 
-        if (elements.datasetNameInput.value) {
+        if (elements.datasetNameInput && elements.datasetNameInput.value) {
             formData.append('datasetName', elements.datasetNameInput.value);
             console.log(`Dataset name: ${elements.datasetNameInput.value}`);
         }
-        if (elements.tableNameInput.value) {
+        if (elements.tableNameInput && elements.tableNameInput.value) {
             formData.append('tableName', elements.tableNameInput.value);
             console.log(`Table name: ${elements.tableNameInput.value}`);
         }
@@ -1003,7 +1003,7 @@
 
         if (dataSource === 'uploaded' && state.stagedUpload) {
             dataset = state.stagedUpload.datasetName;
-            if (elements.datasetNameInput.value) {
+            if (elements.datasetNameInput && elements.datasetNameInput.value) {
                 dataset = elements.datasetNameInput.value.replace(/[^A-Za-z0-9_\-]/g, '_').toLowerCase() || dataset;
             }
 
@@ -1012,7 +1012,7 @@
                 table = config.tableMap[elements.templateSelect.value] || state.stagedUpload.tableName;
             } else if (state.currentTable) {
                 table = state.currentTable;
-            } else if (elements.tableNameInput.value) {
+            } else if (elements.tableNameInput && elements.tableNameInput.value) {
                 table = elements.tableNameInput.value;
             } else {
                 table = state.stagedUpload.tableName;
@@ -1174,35 +1174,38 @@
         });
 
         // Dataset name input
-        elements.datasetNameInput.addEventListener('input', () => {
-            if (state.stagedUpload) {
-                state.metadataReady = false;
-                elements.finalizeStatus.dataset.state = '';
-                state.customMetadataDirty = true;
-                elements.finalizeButton.disabled = false;
-                elements.finalizeButton.hidden = false;
-                if (elements.metadataReminder) elements.metadataReminder.hidden = false;
-                if (!state.jobIsRunning) resetStatusPanel();
-                updateRunButton();
-                updatePreview();
-            }
-        });
+        if (elements.datasetNameInput) {
+            elements.datasetNameInput.addEventListener('input', () => {
+                if (state.stagedUpload) {
+                    state.metadataReady = false;
+                    elements.finalizeStatus.dataset.state = '';
+                    state.customMetadataDirty = true;
+                    elements.finalizeButton.disabled = false;
+                    elements.finalizeButton.hidden = false;
+                    if (elements.metadataReminder) elements.metadataReminder.hidden = false;
+                    if (!state.jobIsRunning) resetStatusPanel();
+                    updateRunButton();
+                    updatePreview();
+                }
+            });
+        }
 
-        // Table name input
-        elements.tableNameInput.addEventListener('input', () => {
-            if (state.stagedUpload) {
-                state.metadataReady = false;
-                elements.finalizeStatus.dataset.state = '';
-                state.customMetadataDirty = true;
-                elements.finalizeButton.disabled = false;
-                elements.finalizeButton.hidden = false;
-                state.currentTable = elements.tableNameInput.value || state.stagedUpload.tableName;
-                if (elements.metadataReminder) elements.metadataReminder.hidden = false;
-                if (!state.jobIsRunning) resetStatusPanel();
-                updateRunButton();
-                updatePreview();
-            }
-        });
+        if (elements.tableNameInput) {
+            elements.tableNameInput.addEventListener('input', () => {
+                if (state.stagedUpload) {
+                    state.metadataReady = false;
+                    elements.finalizeStatus.dataset.state = '';
+                    state.customMetadataDirty = true;
+                    elements.finalizeButton.disabled = false;
+                    elements.finalizeButton.hidden = false;
+                    state.currentTable = elements.tableNameInput.value || state.stagedUpload.tableName;
+                    if (elements.metadataReminder) elements.metadataReminder.hidden = false;
+                    if (!state.jobIsRunning) resetStatusPanel();
+                    updateRunButton();
+                    updatePreview();
+                }
+            });
+        }
 
         // Finalize metadata button
         elements.finalizeButton.addEventListener('click', finalizeCustomMetadata);

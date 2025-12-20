@@ -5,6 +5,7 @@ import logging
 import shutil
 import threading
 import traceback
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -40,6 +41,11 @@ from .tabgraphsyn import (
 from .evaluation import evaluate_synthetic_run
 from .history import fetch_runs_for_user, store_run_history
 from . import job_tracker
+from accounts.decorators import (
+    workspace_api_login_required_if_enabled,
+    workspace_login_required_if_enabled,
+)
+from tabgraphsyn_site.ratelimit import rate_limited
 
 MEDIA_SUBDIR = 'generated'
 DEFAULT_RUN_NAME = 'single_table'
@@ -66,10 +72,33 @@ def _get_or_create_user_id(request: HttpRequest) -> str:
     return request.session.session_key
 
 
+def _get_owner_key(request: HttpRequest) -> str:
+    auth_user = request.session.get('auth_user') or {}
+    username = auth_user.get('username')
+    if username:
+        return str(username)
+    return _get_or_create_user_id(request)
+
+
 def _get_user_profile(request: HttpRequest) -> dict[str, Any]:
     """
     Create a user profile dict from session for compatibility with existing code.
+    Checks for authenticated user first, then falls back to session-based user.
     """
+    # Check if user is authenticated via the accounts app
+    auth_user = request.session.get('auth_user') or {}
+    if auth_user.get('username'):
+        display_name = auth_user.get('full_name') or auth_user.get('name') or auth_user.get('username')
+        return {
+            'username': auth_user.get('username'),
+            'display_name': display_name,
+            'full_name': auth_user.get('full_name') or display_name,
+            'name': auth_user.get('name') or display_name,
+            'email': auth_user.get('email'),
+            'roles': auth_user.get('roles', []),
+        }
+
+    # Fall back to session-based anonymous user
     user_id = _get_or_create_user_id(request)
     return {
         'username': user_id,
@@ -77,6 +106,50 @@ def _get_user_profile(request: HttpRequest) -> dict[str, Any]:
         'full_name': f'Anonymous User',
         'name': f'User-{user_id[:8]}',
     }
+
+
+def _owner_matches(request: HttpRequest, metadata: dict[str, Any]) -> bool:
+    owner_username = metadata.get('owner_username')
+    if not owner_username:
+        owner = metadata.get('owner') or {}
+        owner_username = owner.get('username')
+    if not owner_username:
+        return False
+    return str(owner_username) == _get_owner_key(request)
+
+
+def _enforce_owner(request: HttpRequest, metadata: dict[str, Any]) -> None:
+    if settings.WORKSPACE_ENFORCE_OWNER and not _owner_matches(request, metadata):
+        raise Http404('Synthetic run not found.')
+
+
+def _run_capacity_block(owner_username: str | None) -> tuple[int, str] | None:
+    max_concurrent = getattr(settings, 'PIPELINE_MAX_CONCURRENT', 1)
+    if max_concurrent and job_tracker.count_active_jobs() >= max_concurrent:
+        return 429, 'Server is at capacity. Please try again later.'
+    if owner_username and job_tracker.has_active_job(owner_username):
+        return 409, 'You already have a run in progress. Please wait for it to finish.'
+    return None
+
+
+def _check_result_access(request: HttpRequest, token: str) -> bool:
+    """
+    Check if the current user has access to view/download a result.
+    Returns True when ownership checks are disabled or ownership matches.
+    """
+    meta_path = _metadata_path(token)
+    if not meta_path.exists():
+        return False
+
+    try:
+        with open(meta_path, 'r', encoding='utf-8') as meta_file:
+            metadata = json.load(meta_file)
+        if not settings.WORKSPACE_ENFORCE_OWNER:
+            return True
+        return _owner_matches(request, metadata)
+    except Exception as exc:
+        logger.error(f"Error checking result access for token {token}: {exc}")
+        return False
 
 
 def home_view(request: HttpRequest) -> HttpResponse:
@@ -294,7 +367,8 @@ def _start_pipeline_job(prepared: PreparedRun) -> str:
     job_token = uuid4().hex
     logger.info(f"Creating pipeline job {job_token} for {prepared.description}")
 
-    job_tracker.create_job(job_token)
+    owner_username = (prepared.owner or {}).get('username')
+    job_tracker.create_job(job_token, owner_username=owner_username)
     job_tracker.set_stage(job_token, 'starting', f"Starting {prepared.description}")
 
     thread = threading.Thread(
@@ -386,6 +460,7 @@ def _run_pipeline_job(job_token: str, prepared: PreparedRun) -> None:
         job_tracker.set_error(job_token, error_msg)
 
 
+@workspace_login_required_if_enabled
 def upload_view(request: HttpRequest) -> HttpResponse:
     dataset_map = _dataset_table_map()
     dataset_choices = [(name, name) for name in dataset_map.keys()]
@@ -429,43 +504,47 @@ def upload_view(request: HttpRequest) -> HttpResponse:
 
         if prepared:
             owner_profile = _get_user_profile(request)
-            prepared.owner = owner_profile
-            prepared.started_at = timezone.now().isoformat()
-            try:
-                pipeline_result, token, generated_rows = _run_pipeline_and_capture(
-                    prepared.params
-                )
-            except PipelineError as exc:
-                form.add_error(None, str(exc))
+            block = _run_capacity_block(owner_profile.get('username'))
+            if block:
+                form.add_error(None, block[1])
             else:
-                finished_at = timezone.now().isoformat()
-                evaluation_payload = evaluate_synthetic_run(
-                    dataset=prepared.params.dataset,
-                    table=prepared.params.table,
-                    synthetic_path=pipeline_result.output_csv,
-                )
-                extra_metadata = dict(prepared.extra_metadata)
-                extra_metadata['evaluation'] = evaluation_payload
-                metadata_payload = _build_run_metadata(
-                    params=prepared.params,
-                    pipeline_result=pipeline_result,
-                    token=token,
-                    generated_rows=generated_rows,
-                    data_source=prepared.data_source,
-                    extra_metadata=extra_metadata,
-                    owner=owner_profile,
-                    started_at=prepared.started_at,
-                    finished_at=finished_at,
-                )
-                _persist_run(
-                    token,
-                    pipeline_result,
-                    metadata_payload,
-                    owner=owner_profile,
-                    started_at=prepared.started_at,
-                    finished_at=finished_at,
-                )
-                return redirect('synthetic:result', token=token)
+                prepared.owner = owner_profile
+                prepared.started_at = timezone.now().isoformat()
+                try:
+                    pipeline_result, token, generated_rows = _run_pipeline_and_capture(
+                        prepared.params
+                    )
+                except PipelineError as exc:
+                    form.add_error(None, str(exc))
+                else:
+                    finished_at = timezone.now().isoformat()
+                    evaluation_payload = evaluate_synthetic_run(
+                        dataset=prepared.params.dataset,
+                        table=prepared.params.table,
+                        synthetic_path=pipeline_result.output_csv,
+                    )
+                    extra_metadata = dict(prepared.extra_metadata)
+                    extra_metadata['evaluation'] = evaluation_payload
+                    metadata_payload = _build_run_metadata(
+                        params=prepared.params,
+                        pipeline_result=pipeline_result,
+                        token=token,
+                        generated_rows=generated_rows,
+                        data_source=prepared.data_source,
+                        extra_metadata=extra_metadata,
+                        owner=owner_profile,
+                        started_at=prepared.started_at,
+                        finished_at=finished_at,
+                    )
+                    _persist_run(
+                        token,
+                        pipeline_result,
+                        metadata_payload,
+                        owner=owner_profile,
+                        started_at=prepared.started_at,
+                        finished_at=finished_at,
+                    )
+                    return redirect('synthetic:result', token=token)
 
     context = {
         'form': form,
@@ -488,6 +567,7 @@ def upload_view(request: HttpRequest) -> HttpResponse:
     return render(request, 'synthetic/upload.html', context)
 
 
+@workspace_login_required_if_enabled
 def history_view(request: HttpRequest) -> HttpResponse:
     user = _get_user_profile(request)
     username = user.get('username')
@@ -530,6 +610,7 @@ def history_view(request: HttpRequest) -> HttpResponse:
     return render(request, 'synthetic/history.html', context)
 
 
+@workspace_api_login_required_if_enabled
 @require_POST
 def api_start_run(request: HttpRequest) -> JsonResponse:
     logger.info("API: Start run request received")
@@ -548,6 +629,10 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
         errors = _form_errors(form)
         logger.warning(f"API: Form validation failed: {errors}")
         return JsonResponse({'errors': errors}, status=400)
+
+    owner_key = _get_owner_key(request)
+    if rate_limited(request, 'start_run', identifier=owner_key):
+        return JsonResponse({'error': 'Too many run requests. Please try again later.'}, status=429)
 
     epochs_vae = form.cleaned_data['epochs_vae']
     epochs_gnn = form.cleaned_data['epochs_gnn']
@@ -578,6 +663,9 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     logger.info(f"API: Run prepared successfully for dataset={prepared.params.dataset}, table={prepared.params.table}")
 
     owner_profile = _get_user_profile(request)
+    block = _run_capacity_block(owner_profile.get('username'))
+    if block:
+        return JsonResponse({'error': block[1]}, status=block[0])
     prepared.owner = owner_profile
     prepared.started_at = timezone.now().isoformat()
 
@@ -607,7 +695,12 @@ def api_start_run(request: HttpRequest) -> JsonResponse:
     return JsonResponse(payload, status=202)
 
 
+@workspace_api_login_required_if_enabled
 def api_job_status(request: HttpRequest, token: str) -> JsonResponse:
+    if settings.WORKSPACE_ENFORCE_OWNER:
+        owner_key = _get_owner_key(request)
+        if not job_tracker.job_belongs_to(token, owner_key):
+            return JsonResponse({'error': 'Job not found.'}, status=404)
     job = job_tracker.get_job(token)
     if job is None:
         return JsonResponse({'error': 'Job not found.'}, status=404)
@@ -676,7 +769,280 @@ def _load_epoch_metrics(dataset: str, table: str, run_name: str) -> dict[str, An
         return None
 
 
+def _format_timestamp(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return parsed.strftime('%b %d, %Y %H:%M')
+
+
+def _format_duration(started_at: str | None, finished_at: str | None) -> str | None:
+    if not started_at or not finished_at:
+        return None
+    try:
+        start = datetime.fromisoformat(started_at)
+        finish = datetime.fromisoformat(finished_at)
+    except ValueError:
+        return None
+    delta = finish - start
+    total_seconds = int(delta.total_seconds())
+    if total_seconds < 0:
+        return None
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
+def _build_result_summary(metadata: dict[str, Any], preview_headers: list[str]) -> dict[str, Any]:
+    dataset_label = metadata.get('display_dataset_name') or metadata.get('dataset') or 'Dataset'
+    table_label = metadata.get('display_table_name') or metadata.get('table') or 'Table'
+    data_source = metadata.get('data_source') or 'preloaded'
+    input_columns = metadata.get('input_columns')
+    input_column_count: int | None = None
+    if isinstance(input_columns, list):
+        input_column_count = len(input_columns)
+    elif preview_headers:
+        input_column_count = len(preview_headers)
+    return {
+        'dataset_label': dataset_label,
+        'table_label': table_label,
+        'data_source': data_source,
+        'run_name': metadata.get('run_name') or 'single_table',
+        'started_at': _format_timestamp(metadata.get('started_at')),
+        'finished_at': _format_timestamp(metadata.get('finished_at')),
+        'duration': _format_duration(metadata.get('started_at'), metadata.get('finished_at')),
+        'input_rows': metadata.get('input_rows'),
+        'input_columns': input_column_count,
+        'input_filename': metadata.get('input_filename'),
+    }
+
+
+def _build_config_items(metadata: dict[str, Any]) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    fields = [
+        ('Model type', 'model_type'),
+        ('Normalization', 'normalization'),
+        ('Epochs (VAE)', 'epochs_vae'),
+        ('Epochs (GNN)', 'epochs_gnn'),
+        ('Epochs (Diff)', 'epochs_diff'),
+        ('GNN hidden', 'gnn_hidden'),
+        ('Denoising steps', 'denoising_steps'),
+        ('Random seed', 'random_seed'),
+        ('Samples', 'num_samples'),
+    ]
+    for label, key in fields:
+        value = metadata.get(key)
+        if value is None or value == '':
+            continue
+        items.append({'label': label, 'value': str(value)})
+
+    boolean_fields = [
+        ('Retrain VAE', 'retrain_vae'),
+        ('Positional enc', 'positional_enc'),
+        ('Skip preprocessing', 'skip_preprocessing'),
+        ('Factor missing', 'factor_missing'),
+    ]
+    for label, key in boolean_fields:
+        if metadata.get(key):
+            items.append({'label': label, 'value': 'Yes'})
+    return items
+
+
+EVALUATION_METRIC_GUIDE = [
+    {
+        'key': 'Quality Score',
+        'label': 'Quality score',
+        'description': (
+            'Composite measure of how closely synthetic data matches real data across multiple '
+            'statistical dimensions.'
+        ),
+        'range': '0-1',
+        'interpretation': 'Higher values indicate better overall realism.',
+        'direction': 'Higher is better.',
+    },
+    {
+        'key': 'Column Shapes',
+        'label': 'Column shapes',
+        'description': 'Measures how well the distribution shape of each individual column is preserved.',
+        'range': '0 to infinity (typically small positive values)',
+        'interpretation': 'Lower values indicate closer alignment of marginal distributions.',
+        'direction': 'Lower is better.',
+    },
+    {
+        'key': 'Column Pair Trends',
+        'label': 'Column pair trends',
+        'description': 'Measures how well relationships between pairs of columns are preserved.',
+        'range': '0 to infinity (typically small positive values)',
+        'interpretation': 'Lower values indicate better preservation of pairwise dependencies.',
+        'direction': 'Lower is better.',
+    },
+    {
+        'key': 'Detection Score',
+        'label': 'Detection score',
+        'description': (
+            'Measures how difficult it is for a classifier to distinguish synthetic records from real '
+            'records.'
+        ),
+        'range': '0-1 (0.5 is about random guessing)',
+        'interpretation': 'Scores closer to 0.5 indicate stronger privacy protection.',
+        'direction': 'Higher is better (closer to 0.5).',
+    },
+    {
+        'key': 'NewRowSynthesis_score',
+        'label': 'New row synthesis score',
+        'description': (
+            'Measures the proportion of synthetic records that are not exact replicas of real records.'
+        ),
+        'range': '0-1',
+        'interpretation': 'Higher values indicate stronger protection against memorization.',
+        'direction': 'Higher is better.',
+    },
+    {
+        'key': 'RMSE',
+        'label': 'RMSE',
+        'description': 'Measures the average numerical difference between real and synthetic values.',
+        'range': '0 to infinity',
+        'interpretation': 'Lower values indicate closer numerical agreement.',
+        'direction': 'Lower is better.',
+    },
+    {
+        'key': 'Wasserstein',
+        'label': 'Wasserstein distance',
+        'description': 'Measures the distance between real and synthetic feature distributions.',
+        'range': '0 to infinity',
+        'interpretation': 'Lower values indicate more similar distributions.',
+        'direction': 'Lower is better.',
+    },
+    {
+        'key': 'Kolmogorov-Smirnov statistic',
+        'label': 'Kolmogorov-Smirnov (KS) statistic',
+        'description': (
+            'Measures the maximum difference between cumulative distributions of real and synthetic '
+            'data.'
+        ),
+        'range': '0-1',
+        'interpretation': 'Lower values indicate better distribution alignment.',
+        'direction': 'Lower is better.',
+    },
+    {
+        'key': 'RSP Area',
+        'label': 'RSP area',
+        'description': (
+            'Measures differences in structural or rule-based patterns between real and synthetic data.'
+        ),
+        'range': '0-1',
+        'interpretation': 'Lower values indicate fewer structural deviations.',
+        'direction': 'Lower is better.',
+    },
+]
+
+
+def _metric_key(label: str | None) -> str:
+    if not label:
+        return ''
+    return ''.join(ch for ch in label.lower() if ch.isalnum())
+
+
+def _metric_info_for_label(label: str | None) -> dict[str, str] | None:
+    if not label:
+        return None
+    target = _metric_key(label)
+    if not target:
+        return None
+    for entry in EVALUATION_METRIC_GUIDE:
+        if target in (_metric_key(entry['key']), _metric_key(entry['label'])):
+            return entry
+    return None
+
+
+def _build_metric_tooltip(info: dict[str, str] | None) -> str:
+    if not info:
+        return ''
+    parts = [info.get('description', '').strip()]
+    if info.get('range'):
+        parts.append(f"Range: {info['range']}")
+    if info.get('interpretation'):
+        parts.append(f"Interpretation: {info['interpretation']}")
+    if info.get('direction'):
+        parts.append(f"Direction: {info['direction']}")
+    return '\n'.join(part for part in parts if part)
+
+
+def _build_evaluation_summary(evaluation: dict[str, Any]) -> list[dict[str, str]]:
+    if not evaluation or evaluation.get('status') != 'success':
+        return []
+    metrics = evaluation.get('metrics') or []
+    if not metrics:
+        return []
+    row = metrics[0]
+    preferred = [
+        ('Quality Score', 'Overall synthetic quality'),
+        ('Column Shapes', 'Univariate similarity'),
+        ('Column Pair Trends', 'Bivariate consistency'),
+        ('Detection Score', 'Detectability gap'),
+        ('RMSE', 'Numeric reconstruction error'),
+        ('Wasserstein', 'Distribution distance'),
+        ('Kolmogorov-Smirnov statistic', 'Distribution shift'),
+        ('NewRowSynthesis_score', 'Novelty score'),
+    ]
+    summary: list[dict[str, str]] = []
+    for label, hint in preferred:
+        value = row.get(label)
+        if value in (None, '', 'nan'):
+            continue
+        metric_info = _metric_info_for_label(label)
+        summary.append({
+            'key': label,
+            'label': metric_info['label'] if metric_info else label,
+            'value': str(value),
+            'hint': hint,
+            'tooltip': _build_metric_tooltip(metric_info),
+        })
+        if len(summary) >= 4:
+            break
+    if not summary:
+        for label, value in row.items():
+            if value in (None, '', 'nan'):
+                continue
+            metric_info = _metric_info_for_label(str(label))
+            summary.append({
+                'key': str(label),
+                'label': metric_info['label'] if metric_info else str(label),
+                'value': str(value),
+                'hint': '',
+                'tooltip': _build_metric_tooltip(metric_info),
+            })
+            if len(summary) >= 4:
+                break
+    return summary
+
+
+def _evaluation_status(evaluation: dict[str, Any]) -> dict[str, str]:
+    status = evaluation.get('status') if evaluation else None
+    if status == 'success':
+        return {'label': 'Evaluation ready', 'tone': 'success'}
+    if status in ('missing_dependency', 'missing_real_data', 'missing_synthetic', 'skipped'):
+        return {'label': 'Evaluation unavailable', 'tone': 'warning'}
+    if status == 'error':
+        return {'label': 'Evaluation failed', 'tone': 'danger'}
+    if status:
+        return {'label': 'Evaluation pending', 'tone': 'neutral'}
+    return {'label': 'Evaluation pending', 'tone': 'neutral'}
+
+
+@workspace_login_required_if_enabled
 def result_view(request: HttpRequest, token: str) -> HttpResponse:
+    # Check if user has access to this result
+    if not _check_result_access(request, token):
+        raise Http404('Synthetic run not found or access denied.')
+
     csv_path = _data_path(token)
     meta_path = _metadata_path(token)
     if not meta_path.exists():
@@ -684,6 +1050,7 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
 
     with open(meta_path, 'r', encoding='utf-8') as meta_file:
         metadata = json.load(meta_file)
+    _enforce_owner(request, metadata)
 
     preview_headers: list[str] = []
     preview_rows: list[list[str]] = []
@@ -700,11 +1067,14 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
 
     evaluation: dict[str, Any] = {}
     evaluation_headers: list[str] = []
+    evaluation_header_meta: list[dict[str, str]] = []
     evaluation_rows: list[list[str]] = []
+    evaluation_pairs: list[dict[str, str]] = []
     evaluation_plot_data_uri: str | None = None
     evaluation_plot_path: str | None = None
     evaluation_download_url: str | None = None
     umap_coordinates: str | None = None
+    show_umap = False
 
     raw_evaluation = metadata.get('evaluation')
     if isinstance(raw_evaluation, dict):
@@ -713,6 +1083,22 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
         if metrics:
             evaluation_headers = list(metrics[0].keys())
             evaluation_rows = [[row.get(header, '') for header in evaluation_headers] for row in metrics]
+            for header in evaluation_headers:
+                metric_info = _metric_info_for_label(header)
+                evaluation_header_meta.append({
+                    'key': header,
+                    'label': metric_info['label'] if metric_info else header,
+                    'tooltip': _build_metric_tooltip(metric_info),
+                })
+            if evaluation_rows:
+                first_row = evaluation_rows[0]
+                for idx, header_meta in enumerate(evaluation_header_meta):
+                    value = first_row[idx] if idx < len(first_row) else ''
+                    evaluation_pairs.append({
+                        'label': header_meta.get('label', ''),
+                        'tooltip': header_meta.get('tooltip', ''),
+                        'value': str(value),
+                    })
         plot_payload = evaluation.get('plot') or {}
         evaluation_plot_data_uri = plot_payload.get('data_uri')
         evaluation_plot_path = plot_payload.get('path')
@@ -723,6 +1109,8 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
         umap_coords = evaluation.get('umap_coordinates')
         if umap_coords:
             umap_coordinates = json.dumps(umap_coords)
+        if evaluation.get('status') == 'success':
+            show_umap = bool(umap_coordinates or evaluation_plot_data_uri or evaluation_plot_path)
 
     # Load epoch evaluation data if available
     epoch_metrics_data: dict[str, Any] | None = None
@@ -736,6 +1124,11 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
             # Serialize metrics_history to JSON for JavaScript
             epoch_metrics_json = json.dumps(epoch_metrics_data.get('metrics_history', []))
 
+    result_summary = _build_result_summary(metadata, preview_headers)
+    config_items = _build_config_items(metadata)
+    evaluation_summary = _build_evaluation_summary(evaluation)
+    evaluation_status = _evaluation_status(evaluation)
+
     context = {
         'metadata': metadata,
         'run_token': token,
@@ -745,18 +1138,31 @@ def result_view(request: HttpRequest, token: str) -> HttpResponse:
         'download_url': request.build_absolute_uri(reverse('synthetic:download', kwargs={'token': token})) if has_csv else None,
         'evaluation': evaluation,
         'evaluation_headers': evaluation_headers,
+        'evaluation_header_meta': evaluation_header_meta,
         'evaluation_rows': evaluation_rows,
+        'evaluation_pairs': evaluation_pairs,
         'evaluation_plot_data_uri': evaluation_plot_data_uri,
         'evaluation_plot_path': evaluation_plot_path,
         'evaluation_download_url': evaluation_download_url,
         'umap_coordinates': umap_coordinates,
+        'show_umap': show_umap,
         'epoch_metrics': epoch_metrics_data,
         'epoch_metrics_json': epoch_metrics_json,
+        'result_summary': result_summary,
+        'config_items': config_items,
+        'evaluation_summary': evaluation_summary,
+        'evaluation_status': evaluation_status,
+        'evaluation_metric_guide': EVALUATION_METRIC_GUIDE,
     }
     return render(request, 'synthetic/result.html', context)
 
 
+@workspace_login_required_if_enabled
 def download_view(request: HttpRequest, token: str) -> FileResponse:
+    # Check if user has access to this result
+    if not _check_result_access(request, token):
+        raise Http404('Synthetic dataset not found or access denied.')
+
     csv_path = _data_path(token)
     meta_path = _metadata_path(token)
     if not csv_path.exists() or not meta_path.exists():
@@ -769,7 +1175,12 @@ def download_view(request: HttpRequest, token: str) -> FileResponse:
     return FileResponse(csv_path.open('rb'), as_attachment=True, filename=filename)
 
 
+@workspace_login_required_if_enabled
 def download_plot(request: HttpRequest, token: str) -> FileResponse:
+    # Check if user has access to this result
+    if not _check_result_access(request, token):
+        raise Http404('Synthetic run not found or access denied.')
+
     meta_path = _metadata_path(token)
     if not meta_path.exists():
         raise Http404('Synthetic run metadata not found.')
@@ -792,8 +1203,13 @@ def download_plot(request: HttpRequest, token: str) -> FileResponse:
     return FileResponse(plot_path.open('rb'), as_attachment=True, filename=filename)
 
 
+@workspace_api_login_required_if_enabled
 def api_dataset_view(request: HttpRequest, token: str) -> JsonResponse:
     """API endpoint to serve the full dataset for a given run token."""
+    # Check if user has access to this result
+    if not _check_result_access(request, token):
+        return JsonResponse({'error': 'Dataset not found or access denied.'}, status=404)
+
     csv_path = _data_path(token)
     meta_path = _metadata_path(token)
 
@@ -814,15 +1230,21 @@ def api_dataset_view(request: HttpRequest, token: str) -> JsonResponse:
             'total_rows': len(rows)
         }
 
-        return JsonResponse(response_data)
+        response = JsonResponse(response_data)
+        response['Cache-Control'] = 'no-store'
+        return response
 
     except Exception as e:
         return JsonResponse({'error': f'Failed to load dataset: {str(e)}'}, status=500)
 
 
+@workspace_api_login_required_if_enabled
 @require_POST
 def api_stage_upload(request: HttpRequest) -> JsonResponse:
     logger.info("API: Stage upload request received")
+    owner_key = _get_owner_key(request)
+    if rate_limited(request, 'stage_upload', identifier=owner_key):
+        return JsonResponse({'error': 'Too many uploads. Please try again later.'}, status=429)
     upload = request.FILES.get('dataset')
     if upload is None:
         logger.warning("API: No dataset file provided in upload request")
@@ -857,6 +1279,7 @@ def api_stage_upload(request: HttpRequest) -> JsonResponse:
     return JsonResponse(payload)
 
 
+@workspace_api_login_required_if_enabled
 @require_POST
 def api_finalize_metadata(request: HttpRequest) -> JsonResponse:
     logger.info("API: Finalize metadata request received")

@@ -6,4 +6,5 @@ from django.http import HttpRequest
 
 
 def workspace_user(request: HttpRequest) -> dict[str, Any]:
-    return {'workspace_user': request.session.get('auth_user')}
+    auth_user = request.session.get('auth_user')
+    return {'workspace_user': auth_user, 'auth_user': auth_user}

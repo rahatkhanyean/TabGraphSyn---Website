@@ -149,3 +149,81 @@ Every successful pipeline execution now writes its metadata to MongoDB (collecti
 - Browse https://127.0.0.1:8000/history/ after signing in to see your most recent runs, including dataset/table, source, row counts, and quick links back to the detailed result page.
 - Each document records the owner info, timestamps, evaluation payload, and filesystem pointers, so you can also explore it with `mongosh` or Compass.
 
+### Production deployment and security
+- Set `DEBUG=False`, `SECRET_KEY`, and a production `ALLOWED_HOSTS` list.
+- Enable authentication and per-user isolation with `WORKSPACE_AUTH_REQUIRED=True` and `WORKSPACE_ENFORCE_OWNER=True`.
+- When deploying behind a proxy/load balancer (AWS ALB/ELB, Nginx), set `USE_PROXY_HEADERS=True` and terminate TLS at the edge.
+- CSP is enabled by default when `DEBUG=False`. If you add new CDN assets, update the CSP lists in `tabgraphsyn_site/settings.py`.
+- Run with Gunicorn (see `Dockerfile`) and serve static/media via Nginx or your cloud provider. Persist the `media/` directory.
+
+### Concurrency and GPU sizing guidance
+- The web UI is lightweight, but the training pipeline is heavy and currently runs inside the web process. For production, keep `PIPELINE_MAX_CONCURRENT=1` to protect GPU memory.
+- For higher concurrency, split the pipeline into a worker service (Celery/Redis or a job queue) and keep the web tier CPU-only.
+- GPU sizing is workload-dependent. Typical single-table jobs (tens of thousands of rows, tens of columns) run comfortably on a 16GB GPU. Larger datasets or larger diffusion settings can require 24-40GB.
+- CPU-only runs are possible but usually 5-20x slower; reserve GPU for training and sampling for acceptable turnaround.
+
+## 🚀 Deployment to Production
+
+### Deploy with GPU Support
+
+This project includes complete deployment configuration for GPU-enabled hosting platforms like RunPod, Vast.ai, Lambda Labs, and cloud providers.
+
+#### Quick Start (15 minutes)
+For a rapid deployment guide, see [deploy/QUICK-START.md](deploy/QUICK-START.md)
+
+**Quick steps:**
+1. Get a GPU instance on RunPod or Vast.ai (~$0.20-0.40/hour)
+2. Clone repository and configure environment
+3. Run `docker compose up -d`
+4. Access your site at `http://YOUR_IP`
+
+#### Comprehensive Deployment Guide
+For detailed instructions including domain setup, SSL configuration, and cost optimization, see [DEPLOYMENT.md](DEPLOYMENT.md)
+
+**Covers:**
+- Platform selection (RunPod, Vast.ai, cloud providers)
+- GPU instance setup and configuration
+- Domain registration and DNS configuration
+- SSL/HTTPS setup with Let's Encrypt or Cloudflare
+- Production security checklist
+- Monitoring and backups
+- Cost optimization strategies (~$10-20/month)
+
+#### Deployment Files
+- [Dockerfile](Dockerfile) - GPU-enabled container with CUDA support
+- [docker-compose.yml](docker-compose.yml) - Complete stack (Django + MongoDB + Nginx)
+- [deploy/nginx.conf](deploy/nginx.conf) - Production nginx configuration
+- [deploy/supervisord.conf](deploy/supervisord.conf) - Process management
+- [.env.production.example](.env.production.example) - Production environment template
+
+### Cost-Effective Deployment Strategies
+
+**Option 1: All-in-One GPU Instance**
+- Single server runs web app + model training
+- RunPod/Vast.ai GPU instance: ~$0.20-0.40/hour
+- Stop when not in use to save costs
+- Best for: Development and small-scale production
+
+**Option 2: Hybrid Deployment** (Most cost-effective)
+- Web app: Free tier (Render, Railway) or cheap VPS ($5/month)
+- GPU: On-demand only when training models
+- MongoDB: Free tier (Atlas) or included with web hosting
+- Best for: Production with occasional training
+- **Cost: ~$10-20/month**
+
+**Option 3: Enterprise Cloud**
+- Auto-scaling on AWS, GCP, or Azure
+- Managed services for database, storage, monitoring
+- Best for: High-traffic production deployments
+- Cost: Varies based on usage
+
+### Domain Setup
+
+Get your site online with a custom domain:
+1. **Purchase domain** (~$10/year): Namecheap, Cloudflare, Porkbun
+2. **Configure DNS**: Point A record to your server IP
+3. **Enable SSL**: Use Cloudflare (free) or Let's Encrypt
+4. **Update settings**: Set `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` in `.env`
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for step-by-step instructions.
+

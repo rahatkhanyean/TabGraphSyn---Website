@@ -10,6 +10,15 @@
                 <p class="card-subtitle">Authenticate with credentials stored in MongoDB before orchestrating new synthetic data jobs.</p>
             </div>
         </div>
+        {% if google_oauth_enabled %}
+            <div class="auth-provider">
+                <a href="{{ google_oauth_url }}" class="secondary-button google-button">
+                    <i class="fa-brands fa-google"></i>
+                    Continue with Google
+                </a>
+            </div>
+            <div class="auth-divider"><span>or sign in with username</span></div>
+        {% endif %}
         <form method="post" class="auth-form">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ next }}" />

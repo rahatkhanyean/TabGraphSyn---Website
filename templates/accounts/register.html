@@ -7,9 +7,18 @@
             <div>
                 <div class="card-header-meta">Create account</div>
                 <h1 class="section-title">Spin up a workspace login</h1>
-                <p class="card-subtitle">Choose any username and password. Entries are written directly to MongoDB.</p>
+                <p class="card-subtitle">Choose a username and password. We'll send a verification link to your email.</p>
             </div>
         </div>
+        {% if google_oauth_enabled %}
+            <div class="auth-provider">
+                <a href="{{ google_oauth_url }}" class="secondary-button google-button">
+                    <i class="fa-brands fa-google"></i>
+                    Continue with Google
+                </a>
+            </div>
+            <div class="auth-divider"><span>or sign up with email</span></div>
+        {% endif %}
         <form method="post" class="auth-form">
             {% csrf_token %}
             {% if form.non_field_errors %}
@@ -24,6 +33,13 @@
                 {{ form.username }}
                 {% if form.username.errors %}
                     <div class="field-error">{{ form.username.errors|join:', ' }}</div>
+                {% endif %}
+            </div>
+            <div class="field-block">
+                <label class="field-label" for="id_email">{{ form.email.label }}</label>
+                {{ form.email }}
+                {% if form.email.errors %}
+                    <div class="field-error">{{ form.email.errors|join:', ' }}</div>
                 {% endif %}
             </div>
             <div class="field-block">

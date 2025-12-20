@@ -1,239 +1,413 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% load static %}
 
 {% block title %}TabGraphSyn Run{% endblock %}
 
+{% block main_width_class %} full-width{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/result.css' %}" />
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-<style>
-    /* Inline fallback to guarantee side-by-side dashboard even if cached CSS is stale */
-    .result-dashboard {
-        display: grid;
-        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-        gap: 28px;
-        align-items: flex-start;
-        margin-top: 32px;
-    }
-    .dashboard-column {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-    }
-    .umap-card .umap-plot-container,
-    .umap-card .image-wrapper,
-    .umap-card .empty-state {
-        margin-top: 16px;
-    }
-    @media (max-width: 900px) {
-        .result-dashboard {
-            grid-template-columns: 1fr;
-            gap: 24px;
-        }
-    }
-</style>
 {% endblock %}
 
 {% block content %}
     <!-- Hidden data attribute for run token -->
     <div data-run-token="{{ run_token }}" style="display: none;"></div>
 
-    <div class="result-layout">
-        <div class="result-main">
-            <section class="card" highlight-card>
-                <div class="card-header">
-                    <div>
-                        <div class="card-title"><i class="fa-solid fa-angle-left"></i> Summary</div>
-                        <div class="card-subtitle">Snapshot of configuration and outputs.</div>
-                    </div>
+    <div class="result-viewport">
+        <header class="result-header">
+            <div class="header-left">
+                <div class="hero-eyebrow">Run results</div>
+                <div class="header-title" title="{{ result_summary.dataset_label }}">
+                    <span class="header-main">{{ result_summary.dataset_label }}</span>
+                    <span class="header-sub">Table {{ result_summary.table_label }} &middot; Run {{ result_summary.run_name }}</span>
                 </div>
-                <div class="highlight-grid">
-                    <div class="stat-tile">
-                        <span class="stat-label">Data source</span>
-                        <span class="stat-value">{{ metadata.data_source|default:"preloaded"|capfirst }}</span>
-                    </div>
-                    <div class="stat-tile">
-                        <span class="stat-label">Dataset</span>
-                        <span class="stat-value">{{ metadata.dataset }}</span>
-                    </div>
-                    <div class="stat-tile">
-                        <span class="stat-label">Table</span>
-                        <span class="stat-value">{{ metadata.table }}</span>
-                    </div>
-                    <div class="stat-tile">
-                        <span class="stat-label">Generated rows</span>
-                        <span class="stat-value">{{ metadata.generated_rows|default:"n/a" }}</span>
-                    </div>
+            </div>
+            <div class="header-right">
+                <div class="status-pill status-{{ evaluation_status.tone }}">
+                    <span class="status-dot status-dot-{{ evaluation_status.tone }}"></span>
+                    <span>{{ evaluation_status.label }}</span>
                 </div>
                 <div class="action-row">
                     {% if has_output %}
-                        <a href="{{ download_url }}" class="primary-button">Download synthetic CSV</a>
+                        <a href="{{ download_url }}" class="primary-button" id="download-synthetic" download>Export CSV</a>
                     {% else %}
-                        <span class="secondary-button" is-disabled aria-disabled="true">No synthetic CSV for this run</span>
+                        <span class="secondary-button" is-disabled aria-disabled="true">No synthetic CSV</span>
                     {% endif %}
                     <a href="{% url 'synthetic:generate' %}" class="secondary-button">Run another experiment</a>
                 </div>
-            </section>
+            </div>
+        </header>
 
-            <div class="result-dashboard">
-                <div class="dashboard-column dashboard-left">
-                    <section class="card data-card">
-                        <div class="card-header">
-                            <div>
-                                <div class="card-title">Data (full dataset)</div>
-                                <div class="card-subtitle">Sanity check the generated records before downstream use. Hover over a row to see it highlighted in the UMAP panel on the right.</div>
-                            </div>
-                        </div>
-                        {% if has_output %}
-                            <div class="table-controls">
-                                <label for="column-selector">Columns to show</label>
-                                <div class="table-controls-inline">
-                                    <select id="column-selector" multiple size="6" aria-label="Select columns to display">
-                                    </select>
-                                    <p class="control-hint">Use the dropdown to select or deselect columns. Hover-to-UMAP highlighting stays available.</p>
+        <div class="workspace-grid">
+            <aside class="panel panel-left">
+                <div class="panel-tabs" role="tablist" aria-label="Run panels">
+                    <button class="tab-button active" data-tab="summary" role="tab" id="tab-summary" aria-controls="panel-summary" aria-selected="true" tabindex="0">Summary</button>
+                    <button class="tab-button" data-tab="stats" role="tab" id="tab-stats" aria-controls="panel-stats" aria-selected="false" tabindex="-1">Stats</button>
+                </div>
+
+                <div class="panel-body" data-tab-panel="summary" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary" aria-hidden="false">
+                    <section class="card slim-card scrollable">
+                        <div class="panel-title">Run details</div>
+                        <ul class="meta-list">
+                            <li><span>Data source</span><strong>{{ result_summary.data_source|capfirst }}</strong></li>
+                            <li><span>Input rows</span><strong>{{ result_summary.input_rows|default_if_none:"n/a" }}</strong></li>
+                            <li><span>Generated rows</span><strong>{{ metadata.generated_rows|default_if_none:"n/a" }}</strong></li>
+                            <li><span>Input columns</span><strong>{{ result_summary.input_columns|default_if_none:"n/a" }}</strong></li>
+                            <li><span>Started</span><strong>{{ result_summary.started_at|default:"n/a" }}</strong></li>
+                            <li><span>Finished</span><strong>{{ result_summary.finished_at|default:"n/a" }}</strong></li>
+                            <li><span>Duration</span><strong>{{ result_summary.duration|default:"n/a" }}</strong></li>
+                            <li><span>Input file</span><strong title="{{ result_summary.input_filename|default:"n/a" }}">{{ result_summary.input_filename|default:"n/a"|truncatechars:48 }}</strong></li>
+                        </ul>
+                    </section>
+                    <section class="card slim-card scrollable">
+                        <div class="panel-title">Model configuration</div>
+                        <div class="chip-grid">
+                            {% for item in config_items %}
+                                <div class="config-chip">
+                                    <span class="chip-label">{{ item.label }}</span>
+                                    <span class="chip-value">{{ item.value }}</span>
                                 </div>
-                            </div>
-                            <div class="table-wrapper">
-                                <table class="data-table data-preview-table">
-                                    <thead>
-                                        <tr>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr>
-                                            <td class="loading-row">Loading full dataset…</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="action-row" style="margin-top: 16px;">
-                                <button id="toggle-data-view" class="secondary-button" disabled>
-                                    <i class="fa-solid fa-compress"></i> Show Preview (20 rows)
-                                </button>
-                            </div>
-                        {% else %}
-                            <p class="empty-state">This mode does not produce a sample file. Check the evaluation summary above for status.</p>
-                        {% endif %}
+                            {% empty %}
+                                <p class="empty-state">No configuration captured for this run.</p>
+                            {% endfor %}
+                        </div>
                     </section>
                 </div>
 
-                <div class="dashboard-column dashboard-right">
-                    {% if evaluation and evaluation.status == 'success' %}
-                        {% if umap_coordinates or evaluation_plot_data_uri or evaluation_plot_path %}
-                        <section class="card umap-card">
-                            <div class="card-header">
-                                <div>
-                                    <div class="card-title">UMAP Projection</div>
-                                    <div class="card-subtitle">Track how each synthetic record (hover on the left table) maps into embedding space.</div>
-                                </div>
-                            </div>
-                            {% if umap_coordinates %}
-                                <div class="umap-plot-container">
-                                    <div id="interactive-umap-plot" style="width: 100%; height: 600px;"></div>
-                                </div>
-                                <script id="umap-data" type="application/json">{{ umap_coordinates|safe }}</script>
-                            {% elif evaluation_plot_data_uri %}
-                                <div class="image-wrapper">
-                                    <img src="{{ evaluation_plot_data_uri }}" alt="UMAP projection">
-                                </div>
-                            {% elif evaluation_plot_path %}
-                                <p class="empty-state" style="margin-top: 16px;">UMAP plot saved at {{ evaluation_plot_path }}.</p>
-                            {% endif %}
-                            {% if evaluation_download_url %}
-                                <div class="action-row" style="margin-top: 16px;">
-                                    <a href="{{ evaluation_download_url }}" class="secondary-button">Download UMAP PNG</a>
-                                </div>
-                            {% endif %}
-                        </section>
-                        {% endif %}
-                    {% endif %}
+                <div class="panel-body hidden" data-tab-panel="stats" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-hidden="true">
+                    <section class="card slim-card scrollable">
+                        <div class="panel-title">Column stats</div>
+                        <div class="table-controls">
+                            <label for="stats-column-selector">Choose column</label>
+                            <select id="stats-column-selector" class="input-control compact"></select>
+                        </div>
+                        <div class="stats-grid" id="stats-grid">
+                            <div class="stat-tile"><span class="stat-label">Count</span><span class="stat-value" id="stat-count">-</span></div>
+                            <div class="stat-tile"><span class="stat-label">Unique</span><span class="stat-value" id="stat-unique">-</span></div>
+                            <div class="stat-tile"><span class="stat-label">Min</span><span class="stat-value" id="stat-min">-</span></div>
+                            <div class="stat-tile"><span class="stat-label">Max</span><span class="stat-value" id="stat-max">-</span></div>
+                            <div class="stat-tile"><span class="stat-label">Mean</span><span class="stat-value" id="stat-mean">-</span></div>
+                            <div class="stat-tile"><span class="stat-label">Std</span><span class="stat-value" id="stat-std">-</span></div>
+                        </div>
+                    </section>
+                </div>
+            </aside>
 
-                    {% if evaluation %}
-                    <section class="card evaluation-metrics-card" evaluation-card>
+            <section class="panel panel-center">
+                {% if evaluation %}
+                <div class="top-grid{% if not show_umap %} top-grid-single{% endif %}">
+                    {% if show_umap %}
+                    <section class="card umap-card">
                         <div class="card-header">
                             <div>
-                                <div class="card-title">Evaluation Metrics</div>
-                                <div class="card-subtitle">Quantitative assessment of the synthetic cohort.</div>
+                                <div class="card-title">UMAP projection</div>
+                                <div class="card-subtitle">Hover rows below to spotlight their positions.</div>
+                            </div>
+                        </div>
+                        {% if umap_coordinates %}
+                            <div class="umap-plot-container">
+                                <div id="interactive-umap-plot"></div>
+                            </div>
+                            <script id="umap-data" type="application/json" nonce="{{ csp_nonce }}">{{ umap_coordinates|safe }}</script>
+                        {% elif evaluation_plot_data_uri %}
+                            <div class="image-wrapper">
+                                <img src="{{ evaluation_plot_data_uri }}" alt="UMAP projection">
+                            </div>
+                        {% elif evaluation_plot_path %}
+                            <p class="empty-state" style="margin-top: 16px;">UMAP plot saved at {{ evaluation_plot_path }}.</p>
+                        {% endif %}
+                        {% if evaluation_download_url %}
+                            <div class="action-row" style="margin-top: 12px;">
+                                <a href="{{ evaluation_download_url }}" class="secondary-button">Download UMAP PNG</a>
+                            </div>
+                        {% endif %}
+                    </section>
+                    {% endif %}
+
+                    <section class="card metrics-dashboard">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Metrics dashboard</div>
+                                <div class="card-subtitle">Unified view of quality and evaluation signals.</div>
                             </div>
                         </div>
                         {% if evaluation.status == 'success' %}
-                            {% if evaluation_rows %}
-                                <div class="table-wrapper">
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                {% for header in evaluation_headers %}
-                                                    <th>{{ header }}</th>
+                            <div class="metrics-dashboard-body">
+                                {% if evaluation_summary %}
+                                    {% with quality=evaluation_summary.0.value|default:"0" %}
+                                    <div class="metrics-quality">
+                                        <div class="quality-wrap">
+                                            <div class="quality-circle" style="--quality-score: {% widthratio quality 1 100 %}%;">
+                                                <div class="quality-value">{{ quality }}</div>
+                                                <div class="quality-label">Quality score</div>
+                                            </div>
+                                            <div class="quality-bars">
+                                                {% for metric in evaluation_summary %}
+                                                    {% if metric.key != 'Quality Score' %}
+                                                    <div class="quality-row">
+                                                        <div class="quality-row-label">
+                                                            {% if metric.tooltip %}
+                                                                <span class="metric-help" role="button" aria-expanded="false" tabindex="0">
+                                                                    <span class="metric-help-label">{{ metric.label }}</span>
+                                                                    <span class="metric-help-icon" aria-hidden="true">i</span>
+                                                                    <span class="metric-tooltip" role="tooltip">
+                                                                        <span class="metric-tooltip-title">{{ metric.label }}</span>
+                                                                        <span class="metric-tooltip-body">{{ metric.tooltip|linebreaksbr }}</span>
+                                                                    </span>
+                                                                </span>
+                                                            {% else %}
+                                                                {{ metric.label }}
+                                                            {% endif %}
+                                                        </div>
+                                                        <div class="quality-bar">
+                                                            <div class="quality-bar-fill" style="width: {% widthratio metric.value 1 100 %}%;"></div>
+                                                        </div>
+                                                        <div class="quality-row-value">{{ metric.value }}</div>
+                                                    </div>
+                                                    {% endif %}
                                                 {% endfor %}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for row in evaluation_rows %}
-                                                <tr>
-                                                    {% for cell in row %}
-                                                        <td>{{ cell }}</td>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endwith %}
+                                {% endif %}
+
+                                <div class="metrics-evaluation">
+                                    <div class="panel-title">Evaluation metrics</div>
+                                    {% if evaluation_rows %}
+                                        {% if evaluation_pairs %}
+                                            {% if evaluation_rows|length == 1 or evaluation_header_meta|length > 5 %}
+                                                <div class="evaluation-list">
+                                                    {% for item in evaluation_pairs %}
+                                                        <div class="evaluation-item">
+                                                            <div class="evaluation-label">
+                                                                {% if item.tooltip %}
+                                                                    <span class="metric-help" role="button" aria-expanded="false" tabindex="0">
+                                                                        <span class="metric-help-label">{{ item.label }}</span>
+                                                                        <span class="metric-help-icon" aria-hidden="true">i</span>
+                                                                        <span class="metric-tooltip" role="tooltip">
+                                                                            <span class="metric-tooltip-title">{{ item.label }}</span>
+                                                                            <span class="metric-tooltip-body">{{ item.tooltip|linebreaksbr }}</span>
+                                                                        </span>
+                                                                    </span>
+                                                                {% else %}
+                                                                    {{ item.label }}
+                                                                {% endif %}
+                                                            </div>
+                                                            <div class="evaluation-value">{{ item.value }}</div>
+                                                        </div>
                                                     {% endfor %}
-                                                </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
+                                                </div>
+                                            {% else %}
+                                                <div class="table-wrapper evaluation-table-wrapper">
+                                                    <table class="data-table evaluation-table">
+                                                        <thead>
+                                                            <tr>
+                                                                {% for header in evaluation_header_meta %}
+                                                                    <th>
+                                                                        {% if header.tooltip %}
+                                                                            <span class="metric-help" role="button" aria-expanded="false" tabindex="0">
+                                                                                <span class="metric-help-label">{{ header.label }}</span>
+                                                                                <span class="metric-help-icon" aria-hidden="true">i</span>
+                                                                                <span class="metric-tooltip" role="tooltip">
+                                                                                    <span class="metric-tooltip-title">{{ header.label }}</span>
+                                                                                    <span class="metric-tooltip-body">{{ header.tooltip|linebreaksbr }}</span>
+                                                                                </span>
+                                                                            </span>
+                                                                        {% else %}
+                                                                            {{ header.label }}
+                                                                        {% endif %}
+                                                                    </th>
+                                                                {% endfor %}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for row in evaluation_rows %}
+                                                                <tr>
+                                                                    {% for cell in row %}
+                                                                        <td>{{ cell }}</td>
+                                                                    {% endfor %}
+                                                                </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            {% endif %}
+                                        {% else %}
+                                            <div class="table-wrapper evaluation-table-wrapper">
+                                                <table class="data-table evaluation-table">
+                                                    <thead>
+                                                        <tr>
+                                                            {% for header in evaluation_header_meta %}
+                                                                <th>{{ header.label }}</th>
+                                                            {% endfor %}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for row in evaluation_rows %}
+                                                            <tr>
+                                                                {% for cell in row %}
+                                                                    <td>{{ cell }}</td>
+                                                                {% endfor %}
+                                                            </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <p class="empty-state">Evaluation completed but did not return any metrics.</p>
+                                    {% endif %}
                                 </div>
-                            {% else %}
-                                <p class="empty-state">Evaluation completed but did not return any metrics.</p>
+                            </div>
+
+                            {% if evaluation_metric_guide %}
+                                <details class="metric-guide">
+                                    <summary>Metric guide</summary>
+                                    <div class="metric-guide-grid">
+                                        {% for item in evaluation_metric_guide %}
+                                            <div class="metric-guide-item">
+                                                <div class="metric-guide-title">{{ item.label }}</div>
+                                                <div class="metric-guide-text">{{ item.description }}</div>
+                                                <div class="metric-guide-meta">Range: {{ item.range }}</div>
+                                                <div class="metric-guide-meta">Interpretation: {{ item.interpretation }}</div>
+                                                <div class="metric-guide-meta">Direction: {{ item.direction }}</div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </details>
                             {% endif %}
                         {% else %}
                             <p class="empty-state">Evaluation unavailable: {{ evaluation.error|default:"See run details for more information." }}</p>
                         {% endif %}
                     </section>
-                    {% endif %}
-
-                    {% if epoch_metrics %}
-                    <section class="card epoch-metrics-card">
-                        <div class="card-header">
-                            <div>
-                                <div class="card-title">Training Progress</div>
-                                <div class="card-subtitle">Epoch-wise error metrics tracked during diffusion training.</div>
-                            </div>
-                        </div>
-                        <div class="epoch-metrics-info">
-                            <p style="margin: 0 0 16px; color: var(--text-muted); font-size: 14px;">
-                                Evaluated every <strong>{{ epoch_metrics.eval_frequency }}</strong> epochs using <strong>{{ epoch_metrics.num_eval_samples }}</strong> synthetic samples.
-                            </p>
-                        </div>
-                        <div class="charts-grid">
-                            <div class="chart-container">
-                                <canvas id="marginalErrorChart"></canvas>
-                            </div>
-                            <div class="chart-container">
-                                <canvas id="pairwiseErrorChart"></canvas>
-                            </div>
-                        </div>
-                        <div class="action-row" style="margin-top: 20px;">
-                            <button type="button" class="secondary-button compact" onclick="downloadChart('marginalErrorChart', 'marginal_error_chart.png')">Download Marginal Chart</button>
-                            <button type="button" class="secondary-button compact" onclick="downloadChart('pairwiseErrorChart', 'pairwise_error_chart.png')">Download Pairwise Chart</button>
-                        </div>
-                    </section>
-                    {% endif %}
                 </div>
-            </div>
+                {% endif %}
+
+                <section class="card data-card center-bottom">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Data explorer</div>
+                            <div class="card-subtitle">Hover rows to spotlight in UMAP.</div>
+                        </div>
+                        {% if has_output %}
+                            <div class="data-card-meta">
+                                <span class="meta-pill" id="data-mode-label">Loading view</span>
+                                <span class="meta-pill"><strong id="data-row-count">{{ preview_rows|length }}</strong>/<span id="data-row-total">{{ metadata.generated_rows|default:"-" }}</span> rows</span>
+                                <span class="meta-pill"><strong id="data-column-count">{{ preview_headers|length }}</strong> columns shown</span>
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% if has_output %}
+                        <div class="table-controls">
+                            <label for="column-search">Find columns</label>
+                            <div class="table-controls-row">
+                                <div class="input-with-icon">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="text" id="column-search" class="input-control compact" placeholder="Search columns..." autocomplete="off">
+                                </div>
+                                <div class="input-with-icon">
+                                    <i class="fa-solid fa-filter"></i>
+                                    <input type="text" id="row-search" class="input-control compact" placeholder="Search rows..." autocomplete="off" aria-label="Search rows">
+                                </div>
+                                <button id="reset-columns" class="secondary-button compact" type="button">Reset</button>
+                            </div>
+                            <div class="table-controls-inline">
+                                <select id="column-selector" multiple size="6" aria-label="Select columns to display"></select>
+                                <p class="control-hint">Filter or deselect to focus on specific signals.</p>
+                            </div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="data-table data-preview-table">
+                                <thead>
+                                    <tr>
+                                        {% if preview_headers %}
+                                            {% for header in preview_headers %}
+                                                <th>{{ header }}</th>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if preview_rows %}
+                                        {% for row in preview_rows %}
+                                            <tr data-row-index="{{ forloop.counter0 }}">
+                                                {% for cell in row %}
+                                                    <td>{{ cell }}</td>
+                                                {% endfor %}
+                                            </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr><td class="loading-row">Loading full dataset.</td></tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="action-row" style="margin-top: 10px;">
+                            <button id="toggle-data-view" class="secondary-button" disabled>
+                                <i class="fa-solid fa-compress"></i> Show Preview (20 rows)
+                            </button>
+                        </div>
+                    {% else %}
+                        <p class="empty-state">This mode does not produce a sample file. Check the evaluation summary above for status.</p>
+                    {% endif %}
+                </section>
+            </section>
+
+            <aside class="panel panel-right">
+                {% if epoch_metrics %}
+                <section class="card epoch-metrics-card slim-card scrollable">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Training progress</div>
+                            <div class="card-subtitle">Epoch-wise error metrics tracked during diffusion training.</div>
+                        </div>
+                    </div>
+                    <div class="epoch-metrics-info">
+                        <p style="margin: 0 0 12px; color: var(--text-muted); font-size: 14px;">
+                            Evaluated every <strong>{{ epoch_metrics.eval_frequency }}</strong> epochs using <strong>{{ epoch_metrics.num_eval_samples }}</strong> synthetic samples.
+                        </p>
+                    </div>
+                    <div class="charts-grid">
+                        <div class="chart-container"><canvas id="marginalErrorChart"></canvas></div>
+                        <div class="chart-container"><canvas id="pairwiseErrorChart"></canvas></div>
+                    </div>
+                    <div class="action-row" style="margin-top: 12px;">
+                        <button type="button" class="secondary-button compact" onclick="downloadChart('marginalErrorChart', 'marginal_error_chart.png')">Download Marginal Chart</button>
+                        <button type="button" class="secondary-button compact" onclick="downloadChart('pairwiseErrorChart', 'pairwise_error_chart.png')">Download Pairwise Chart</button>
+                    </div>
+                </section>
+                {% endif %}
+
+                <section class="card slim-card scrollable">
+                    <div class="panel-title">Downloads & Logs</div>
+                    <ul class="meta-list">
+                        {% if has_output %}
+                        <li><span>Synthetic CSV</span><strong><a href="{{ download_url }}">Download</a></strong></li>
+                        {% endif %}
+                        {% if evaluation_download_url %}
+                        <li><span>UMAP PNG</span><strong><a href="{{ evaluation_download_url }}">Download</a></strong></li>
+                        {% endif %}
+                        {% if metadata.log_file %}
+                        <li><span>Run log</span><strong title="{{ metadata.log_file }}">{{ metadata.log_file|truncatechars:40 }}</strong></li>
+                        {% endif %}
+                    </ul>
+                </section>
+            </aside>
         </div>
     </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Result page interactive features -->
 <script src="{% static 'js/result.js' %}"></script>
 
 {% if epoch_metrics %}
-<!-- Chart.js Library -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-<script>
+<script nonce="{{ csp_nonce }}">
 // Epoch metrics data from Django
 const epochMetricsData = JSON.parse('{{ epoch_metrics_json|escapejs }}');
 
-// Extract data for charts
 const epochs = [];
 const marginalErrors = [];
 const pairwiseErrors = [];
@@ -246,30 +420,15 @@ epochMetricsData.forEach(entry => {
     trainingLosses.push(entry.train_loss || null);
 });
 
-// Chart configuration
 const chartConfig = {
     type: 'line',
     options: {
         responsive: true,
         maintainAspectRatio: true,
         aspectRatio: 2,
-        interaction: {
-            mode: 'index',
-            intersect: false,
-        },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
-            legend: {
-                display: true,
-                position: 'top',
-                labels: {
-                    font: {
-                        size: 13,
-                        family: 'Inter, sans-serif'
-                    },
-                    padding: 15,
-                    usePointStyle: true,
-                }
-            },
+            legend: { display: true, position: 'top', labels: { font: { size: 13, family: 'Inter, sans-serif' }, padding: 15, usePointStyle: true } },
             tooltip: {
                 backgroundColor: 'rgba(15, 23, 42, 0.95)',
                 titleColor: '#fff',
@@ -281,158 +440,43 @@ const chartConfig = {
                 callbacks: {
                     label: function(context) {
                         let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        if (context.parsed.y !== null) {
-                            label += context.parsed.y.toFixed(4);
-                        }
+                        if (label) { label += ': '; }
+                        if (context.parsed.y !== null) { label += context.parsed.y.toFixed(4); }
                         return label;
                     }
                 }
             }
         },
         scales: {
-            x: {
-                title: {
-                    display: true,
-                    text: 'Epoch',
-                    font: {
-                        size: 14,
-                        weight: '600',
-                        family: 'Inter, sans-serif'
-                    },
-                    padding: {top: 10}
-                },
-                grid: {
-                    display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
-                },
-                ticks: {
-                    font: {
-                        size: 12,
-                        family: 'Inter, sans-serif'
-                    }
-                }
-            },
-            y: {
-                beginAtZero: false,
-                title: {
-                    display: true,
-                    text: 'Score',
-                    font: {
-                        size: 14,
-                        weight: '600',
-                        family: 'Inter, sans-serif'
-                    },
-                    padding: {bottom: 10}
-                },
-                grid: {
-                    display: true,
-                    color: 'rgba(148, 163, 184, 0.1)',
-                },
-                ticks: {
-                    font: {
-                        size: 12,
-                        family: 'Inter, sans-serif'
-                    }
-                }
-            }
+            x: { title: { display: true, text: 'Epoch', font: { size: 14, weight: '600', family: 'Inter, sans-serif' }, padding: {top: 10} }, grid: { display: true, color: 'rgba(148, 163, 184, 0.1)' }, ticks: { font: { size: 12, family: 'Inter, sans-serif' } } },
+            y: { beginAtZero: false, title: { display: true, text: 'Score', font: { size: 14, weight: '600', family: 'Inter, sans-serif' }, padding: {bottom: 10} }, grid: { display: true, color: 'rgba(148, 163, 184, 0.1)' }, ticks: { font: { size: 12, family: 'Inter, sans-serif' } } }
         }
     }
 };
 
-// Marginal Error Chart
 const marginalCtx = document.getElementById('marginalErrorChart').getContext('2d');
-const marginalChart = new Chart(marginalCtx, {
+new Chart(marginalCtx, {
     ...chartConfig,
     data: {
         labels: epochs,
         datasets: [
-            {
-                label: 'Marginal Distribution Error (Column Shapes)',
-                data: marginalErrors,
-                borderColor: '#6366f1',
-                backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                pointBackgroundColor: '#6366f1',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                fill: true,
-            },
-            {
-                label: 'Training Loss',
-                data: trainingLosses,
-                borderColor: '#f97316',
-                backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                tension: 0.4,
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                pointBackgroundColor: '#f97316',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                fill: false,
-                yAxisID: 'y',
-            }
+            { label: 'Marginal Distribution Error (Column Shapes)', data: marginalErrors, borderColor: '#6366f1', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderWidth: 3, tension: 0.4, pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: '#6366f1', pointBorderColor: '#fff', pointBorderWidth: 2, fill: true },
+            { label: 'Training Loss', data: trainingLosses, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, borderDash: [5, 5], tension: 0.4, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#f97316', pointBorderColor: '#fff', pointBorderWidth: 2, fill: false, yAxisID: 'y' }
         ]
     }
 });
 
-// Pairwise Error Chart
 const pairwiseCtx = document.getElementById('pairwiseErrorChart').getContext('2d');
-const pairwiseChart = new Chart(pairwiseCtx, {
+new Chart(pairwiseCtx, {
     ...chartConfig,
     data: {
         labels: epochs,
         datasets: [
-            {
-                label: 'Pairwise Correlation Error (Column Pair Trends)',
-                data: pairwiseErrors,
-                borderColor: '#8b5cf6',
-                backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                pointBackgroundColor: '#8b5cf6',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                fill: true,
-            },
-            {
-                label: 'Training Loss',
-                data: trainingLosses,
-                borderColor: '#f97316',
-                backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                borderWidth: 2,
-                borderDash: [5, 5],
-                tension: 0.4,
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                pointBackgroundColor: '#f97316',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                fill: false,
-                yAxisID: 'y',
-            }
+            { label: 'Pairwise Correlation Error (Column Pair Trends)', data: pairwiseErrors, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.1)', borderWidth: 3, tension: 0.4, pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: '#8b5cf6', pointBorderColor: '#fff', pointBorderWidth: 2, fill: true },
+            { label: 'Training Loss', data: trainingLosses, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, borderDash: [5, 5], tension: 0.4, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: '#f97316', pointBorderColor: '#fff', pointBorderWidth: 2, fill: false, yAxisID: 'y' }
         ]
     }
 });
-
-// Download chart as PNG
-function downloadChart(chartId, filename) {
-    const canvas = document.getElementById(chartId);
-    const url = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = url;
-    link.click();
-}
 </script>
 {% endif %}
 {% endblock %}

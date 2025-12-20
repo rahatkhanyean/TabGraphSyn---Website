@@ -46,22 +46,6 @@
                             </div>
                         </div>
                         <div class="field-row">
-                            <div>
-                                <label class="field-label" for="{{ form.uploaded_dataset_name.id_for_label }}">Dataset name (optional)</label>
-                                {{ form.uploaded_dataset_name }}
-                            </div>
-                            <div>
-                                <label class="field-label" for="{{ form.uploaded_table_name.id_for_label }}">Table name (optional)</label>
-                                {{ form.uploaded_table_name }}
-                            </div>
-                        </div>
-                        {% if form.uploaded_dataset_name.errors or form.uploaded_table_name.errors %}
-                            <div class="field-row">
-                                <div>{% if form.uploaded_dataset_name.errors %}<ul class="errorlist">{% for error in form.uploaded_dataset_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}</div>
-                                <div>{% if form.uploaded_table_name.errors %}<ul class="errorlist">{% for error in form.uploaded_table_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}</div>
-                            </div>
-                        {% endif %}
-                        <div class="field-row">
                             <div id="upload-summary" class="field-help" hidden></div>
                         </div>
 
@@ -228,29 +212,7 @@
                 </div>
             </div>
         </form>
-
-        <!-- Sidebar with Status Monitor -->
         <aside class="journey-sidebar">
-            <div class="status-card">
-                <div class="card-header">
-                    <div>
-                        <div class="card-title">Live run monitor</div>
-                        <div class="card-subtitle">Track your generation progress in real-time</div>
-                    </div>
-                </div>
-                <p class="status-hint" id="status-placeholder">Upload a CSV and click "Run Pipeline" to begin</p>
-                <section class="card" run-status-card id="run-status-panel" hidden aria-live="polite">
-                    <div class="card-header">
-                        <div class="card-title">Run status</div>
-                        <div class="card-subtitle" id="run-status-stage">Queued</div>
-                    </div>
-                    <p id="run-status-message" class="status-message"></p>
-                    <pre id="run-status-logs" class="status-logs"></pre>
-                    <div class="action-row" id="run-status-actions" hidden>
-                        <a href="#" id="run-status-open-result" class="primary-button">View results</a>
-                    </div>
-                </section>
-            </div>
             <div class="tips-card">
                 <h3>Quick tips</h3>
                 <ul>

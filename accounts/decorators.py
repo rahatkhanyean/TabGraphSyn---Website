@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import wraps
 from urllib.parse import quote
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -30,5 +31,25 @@ def workspace_api_login_required(view_func):
         if _is_authenticated(request):
             return view_func(request, *args, **kwargs)
         return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    return _wrapped
+
+
+def workspace_login_required_if_enabled(view_func):
+    @wraps(view_func)
+    def _wrapped(request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        if getattr(settings, 'WORKSPACE_AUTH_REQUIRED', False):
+            return workspace_login_required(view_func)(request, *args, **kwargs)
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+def workspace_api_login_required_if_enabled(view_func):
+    @wraps(view_func)
+    def _wrapped(request: HttpRequest, *args, **kwargs) -> JsonResponse:
+        if getattr(settings, 'WORKSPACE_AUTH_REQUIRED', False):
+            return workspace_api_login_required(view_func)(request, *args, **kwargs)
+        return view_func(request, *args, **kwargs)
 
     return _wrapped

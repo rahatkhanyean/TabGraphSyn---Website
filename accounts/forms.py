@@ -29,6 +29,13 @@ class RegisterForm(forms.Form):
         ),
         label='Username',
     )
+    email = forms.EmailField(
+        max_length=254,
+        widget=forms.EmailInput(
+            attrs={'autocomplete': 'email', 'class': 'input-control', 'placeholder': 'name@example.com'}
+        ),
+        label='Email',
+    )
     password = forms.CharField(
         widget=forms.PasswordInput(
             attrs={

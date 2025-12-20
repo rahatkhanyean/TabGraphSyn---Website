@@ -13,13 +13,14 @@ services:
     networks:
       - tabgraphsyn_network
 
-  # Django web application
+  # Django web application with GPU support
   web:
     build: .
     container_name: tabgraphsyn_web
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "80:80"
+      - "443:443"
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
@@ -30,11 +31,22 @@ services:
       - TABGRAPHSYN_MONGO_DB=tabgraphsyn
       - TABGRAPHSYN_MONGO_USERS_COLLECTION=users
       - TABGRAPHSYN_MONGO_RUNS_COLLECTION=runs
+      # Load from .env file for production
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS}
     depends_on:
       - mongodb
     networks:
       - tabgraphsyn_network
-    command: python manage.py runserver 0.0.0.0:8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 volumes:
   mongodb_data:

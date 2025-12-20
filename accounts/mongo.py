@@ -55,6 +55,11 @@ def fetch_user(username: str) -> Optional[dict[str, Any]]:
     return collection.find_one({'username': username})
 
 
+def fetch_user_by_email(email_lower: str) -> Optional[dict[str, Any]]:
+    collection = get_users_collection()
+    return collection.find_one({'email_lower': email_lower})
+
+
 def authenticate_user(username: str, password: str) -> Optional[dict[str, Any]]:
     try:
         user = fetch_user(username)
