@@ -140,6 +140,38 @@
     min-height: 0;
 }
 
+.metrics-snapshot {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.snapshot-item {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(14, 165, 233, 0.15);
+    background: rgba(14, 165, 233, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.snapshot-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    text-transform: none;
+}
+
+.snapshot-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
 .metrics-quality {
     background: rgba(14, 165, 233, 0.06);
     border-radius: 12px;
@@ -617,6 +649,89 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.filter-card {
+    gap: 16px;
+}
+
+.filter-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    align-items: end;
+}
+
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.filter-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.filter-active {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.filter-list {
+    display: grid;
+    gap: 8px;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.filter-item-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.filter-remove {
+    border: none;
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.filter-remove:hover {
+    background: rgba(239, 68, 68, 0.2);
 }
 
 .table-controls-row {

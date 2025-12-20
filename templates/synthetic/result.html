@@ -41,57 +41,51 @@
 
         <div class="workspace-grid">
             <aside class="panel panel-left">
-                <div class="panel-tabs" role="tablist" aria-label="Run panels">
-                    <button class="tab-button active" data-tab="summary" role="tab" id="tab-summary" aria-controls="panel-summary" aria-selected="true" tabindex="0">Summary</button>
-                    <button class="tab-button" data-tab="stats" role="tab" id="tab-stats" aria-controls="panel-stats" aria-selected="false" tabindex="-1">Stats</button>
-                </div>
-
-                <div class="panel-body" data-tab-panel="summary" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary" aria-hidden="false">
-                    <section class="card slim-card scrollable">
-                        <div class="panel-title">Run details</div>
-                        <ul class="meta-list">
-                            <li><span>Data source</span><strong>{{ result_summary.data_source|capfirst }}</strong></li>
-                            <li><span>Input rows</span><strong>{{ result_summary.input_rows|default_if_none:"n/a" }}</strong></li>
-                            <li><span>Generated rows</span><strong>{{ metadata.generated_rows|default_if_none:"n/a" }}</strong></li>
-                            <li><span>Input columns</span><strong>{{ result_summary.input_columns|default_if_none:"n/a" }}</strong></li>
-                            <li><span>Started</span><strong>{{ result_summary.started_at|default:"n/a" }}</strong></li>
-                            <li><span>Finished</span><strong>{{ result_summary.finished_at|default:"n/a" }}</strong></li>
-                            <li><span>Duration</span><strong>{{ result_summary.duration|default:"n/a" }}</strong></li>
-                            <li><span>Input file</span><strong title="{{ result_summary.input_filename|default:"n/a" }}">{{ result_summary.input_filename|default:"n/a"|truncatechars:48 }}</strong></li>
-                        </ul>
-                    </section>
-                    <section class="card slim-card scrollable">
-                        <div class="panel-title">Model configuration</div>
-                        <div class="chip-grid">
-                            {% for item in config_items %}
-                                <div class="config-chip">
-                                    <span class="chip-label">{{ item.label }}</span>
-                                    <span class="chip-value">{{ item.value }}</span>
+                <section class="card slim-card filter-card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Filters</div>
+                            <div class="card-subtitle">Slice the dataset and update the dashboard.</div>
+                        </div>
+                    </div>
+                    {% if has_output %}
+                        <div class="filter-controls">
+                            <div class="filter-row">
+                                <div class="filter-field">
+                                    <label for="filter-column">Column</label>
+                                    <select id="filter-column" class="input-control compact"></select>
                                 </div>
-                            {% empty %}
-                                <p class="empty-state">No configuration captured for this run.</p>
-                            {% endfor %}
+                                <div class="filter-field">
+                                    <label for="filter-operator">Condition</label>
+                                    <select id="filter-operator" class="input-control compact"></select>
+                                </div>
+                            </div>
+                            <div class="filter-row">
+                                <div class="filter-field" id="filter-value-wrap">
+                                    <label for="filter-value">Value</label>
+                                    <input type="text" id="filter-value" class="input-control compact" placeholder="Enter value">
+                                </div>
+                                <div class="filter-field hidden" id="filter-value-max-wrap">
+                                    <label for="filter-value-max">and</label>
+                                    <input type="text" id="filter-value-max" class="input-control compact" placeholder="Max value">
+                                </div>
+                            </div>
+                            <div class="filter-actions">
+                                <button id="add-filter" class="primary-button compact" type="button">Add filter</button>
+                                <button id="clear-filters" class="secondary-button compact" type="button">Clear filters</button>
+                            </div>
+                            <p class="control-hint">Filters apply to UMAP and the data explorer instantly.</p>
                         </div>
-                    </section>
-                </div>
-
-                <div class="panel-body hidden" data-tab-panel="stats" id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" aria-hidden="true">
-                    <section class="card slim-card scrollable">
-                        <div class="panel-title">Column stats</div>
-                        <div class="table-controls">
-                            <label for="stats-column-selector">Choose column</label>
-                            <select id="stats-column-selector" class="input-control compact"></select>
+                        <div class="filter-active">
+                            <div class="panel-title">Active filters</div>
+                            <div id="active-filters" class="filter-list">
+                                <div class="empty-state">No filters applied.</div>
+                            </div>
                         </div>
-                        <div class="stats-grid" id="stats-grid">
-                            <div class="stat-tile"><span class="stat-label">Count</span><span class="stat-value" id="stat-count">-</span></div>
-                            <div class="stat-tile"><span class="stat-label">Unique</span><span class="stat-value" id="stat-unique">-</span></div>
-                            <div class="stat-tile"><span class="stat-label">Min</span><span class="stat-value" id="stat-min">-</span></div>
-                            <div class="stat-tile"><span class="stat-label">Max</span><span class="stat-value" id="stat-max">-</span></div>
-                            <div class="stat-tile"><span class="stat-label">Mean</span><span class="stat-value" id="stat-mean">-</span></div>
-                            <div class="stat-tile"><span class="stat-label">Std</span><span class="stat-value" id="stat-std">-</span></div>
-                        </div>
-                    </section>
-                </div>
+                    {% else %}
+                        <p class="empty-state">Filters are available when a synthetic CSV is generated.</p>
+                    {% endif %}
+                </section>
             </aside>
 
             <section class="panel panel-center">
@@ -131,7 +125,24 @@
                                 <div class="card-title">Metrics dashboard</div>
                                 <div class="card-subtitle">Unified view of quality and evaluation signals.</div>
                             </div>
+                            <span class="meta-pill" id="metrics-filter-pill">No filters</span>
                         </div>
+                        {% if has_output %}
+                            <div class="metrics-snapshot">
+                                <div class="snapshot-item">
+                                    <span class="snapshot-label">Rows in view</span>
+                                    <span class="snapshot-value" id="metrics-row-count">{{ preview_rows|length }}</span>
+                                </div>
+                                <div class="snapshot-item">
+                                    <span class="snapshot-label">Filtered total</span>
+                                    <span class="snapshot-value" id="metrics-row-total">{{ metadata.generated_rows|default:"-" }}</span>
+                                </div>
+                                <div class="snapshot-item">
+                                    <span class="snapshot-label">Columns shown</span>
+                                    <span class="snapshot-value" id="metrics-column-count">{{ preview_headers|length }}</span>
+                                </div>
+                            </div>
+                        {% endif %}
                         {% if evaluation.status == 'success' %}
                             <div class="metrics-dashboard-body">
                                 {% if evaluation_summary %}
@@ -296,6 +307,7 @@
                                 <span class="meta-pill" id="data-mode-label">Loading view</span>
                                 <span class="meta-pill"><strong id="data-row-count">{{ preview_rows|length }}</strong>/<span id="data-row-total">{{ metadata.generated_rows|default:"-" }}</span> rows</span>
                                 <span class="meta-pill"><strong id="data-column-count">{{ preview_headers|length }}</strong> columns shown</span>
+                                <span class="meta-pill"><strong id="filter-count">0</strong> filters</span>
                             </div>
                         {% endif %}
                     </div>

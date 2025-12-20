@@ -1,6 +1,8 @@
 // Interactive features for the result page (no page scroll layout)
 
 let umapData = null;
+let umapRealPoints = [];
+let umapSyntheticPoints = [];
 let currentHoveredRow = null;
 let allDataRows = [];
 let allHeaders = [];
@@ -9,6 +11,23 @@ let currentDisplayMode = 'all';
 const PREVIEW_ROW_COUNT = 20;
 let statsSelectedColumn = null;
 let rowSearchQuery = '';
+let activeFilters = [];
+let filteredRows = null;
+let filteredRowIndexes = null;
+let nextFilterId = 1;
+
+const FILTER_OPERATORS = [
+    { value: 'contains', label: 'contains', type: 'text' },
+    { value: 'equals', label: 'equals', type: 'both' },
+    { value: 'not_equals', label: 'not equals', type: 'both' },
+    { value: 'gt', label: 'greater than', type: 'number' },
+    { value: 'gte', label: 'greater or equal', type: 'number' },
+    { value: 'lt', label: 'less than', type: 'number' },
+    { value: 'lte', label: 'less or equal', type: 'number' },
+    { value: 'between', label: 'between', type: 'number' },
+    { value: 'is_empty', label: 'is empty', type: 'both', noValue: true },
+    { value: 'not_empty', label: 'is not empty', type: 'both', noValue: true }
+];
 
 function initializeInteractiveUMAP(umapCoordinates) {
     if (!umapCoordinates || umapCoordinates.length === 0) return;
@@ -16,6 +35,8 @@ function initializeInteractiveUMAP(umapCoordinates) {
 
     const realPoints = umapCoordinates.filter(p => p.type === 'real');
     const syntheticPoints = umapCoordinates.filter(p => p.type === 'synthetic');
+    umapRealPoints = realPoints;
+    umapSyntheticPoints = syntheticPoints;
 
     const realTrace = {
         x: realPoints.map(p => p.x),
@@ -84,6 +105,9 @@ function initializeInteractiveUMAP(umapCoordinates) {
             plotDiv.dataset.resizeBound = 'true';
             window.addEventListener('resize', () => Plotly.Plots.resize(plotDiv));
         }
+        if (activeFilters.length) {
+            updateUMAPFilter();
+        }
     }
 }
 
@@ -118,6 +142,28 @@ function removeUMAPHighlight() {
     if (plotDiv && plotDiv.data && plotDiv.data.length > 2) {
         Plotly.deleteTraces(plotDiv, 2);
     }
+}
+
+function updateUMAPFilter() {
+    if (!umapSyntheticPoints.length) return;
+    const plotDiv = document.getElementById('interactive-umap-plot');
+    if (!plotDiv || !plotDiv.data || plotDiv.data.length < 2) return;
+
+    let filtered = umapSyntheticPoints;
+    if (activeFilters.length && filteredRowIndexes) {
+        const allowed = new Set(filteredRowIndexes);
+        filtered = umapSyntheticPoints.filter(point => allowed.has(point.index));
+    }
+
+    Plotly.restyle(
+        plotDiv,
+        {
+            x: [filtered.map(point => point.x)],
+            y: [filtered.map(point => point.y)],
+            customdata: [filtered.map(point => point.index)]
+        },
+        [1]
+    );
 }
 
 function attachTableHoverListeners() {
@@ -188,14 +234,11 @@ function renderRows(rows, offset, rowIndexes = null) {
     });
 }
 
-function renderAllData() {
-    if (!allDataRows.length) return;
-    renderRows(allDataRows, 0);
-}
-
-function renderPreviewData() {
-    if (!allDataRows.length) return;
-    renderRows(allDataRows.slice(0, PREVIEW_ROW_COUNT), 0);
+function getBaseRows() {
+    if (activeFilters.length && filteredRows && filteredRowIndexes) {
+        return { rows: filteredRows, indexes: filteredRowIndexes };
+    }
+    return { rows: allDataRows, indexes: allDataRows.map((_, idx) => idx) };
 }
 
 function updateRowCountDisplay(displayedRows = null, totalRowsOverride = null, isFiltered = false) {
@@ -208,6 +251,10 @@ function updateRowCountDisplay(displayedRows = null, totalRowsOverride = null, i
     const rowCount = document.getElementById('data-row-count');
     const rowTotal = document.getElementById('data-row-total');
     const columnCount = document.getElementById('data-column-count');
+    const filterCount = document.getElementById('filter-count');
+    const metricsRowCount = document.getElementById('metrics-row-count');
+    const metricsRowTotal = document.getElementById('metrics-row-total');
+    const metricsColumnCount = document.getElementById('metrics-column-count');
 
     if (modeLabel) {
         if (isFiltered) {
@@ -219,30 +266,41 @@ function updateRowCountDisplay(displayedRows = null, totalRowsOverride = null, i
     if (rowCount) rowCount.textContent = displayed;
     if (rowTotal) rowTotal.textContent = totalRows;
     if (columnCount) columnCount.textContent = selectedCount;
+    if (filterCount) filterCount.textContent = activeFilters.length;
+    if (metricsRowCount) metricsRowCount.textContent = displayed;
+    if (metricsRowTotal) metricsRowTotal.textContent = totalRows;
+    if (metricsColumnCount) metricsColumnCount.textContent = selectedCount;
 }
 
 function renderCurrentView() {
     if (!allDataRows.length) return;
+    const base = getBaseRows();
+    const baseRows = base.rows;
+    const baseIndexes = base.indexes;
     const search = rowSearchQuery.trim().toLowerCase();
     if (search) {
         const columnIndexes = getSelectedColumnIndexes();
         const searchIndexes = columnIndexes.length ? columnIndexes : allHeaders.map((_, idx) => idx);
         const matches = [];
         const matchIndexes = [];
-        allDataRows.forEach((row, idx) => {
+        baseRows.forEach((row, idx) => {
             const hit = searchIndexes.some(ci => String(row[ci] ?? '').toLowerCase().includes(search));
             if (hit) {
                 matches.push(row);
-                matchIndexes.push(idx);
+                matchIndexes.push(baseIndexes[idx]);
             }
         });
         const limitedRows = matches.slice(0, PREVIEW_ROW_COUNT);
         const limitedIndexes = matchIndexes.slice(0, PREVIEW_ROW_COUNT);
         renderRows(limitedRows, 0, limitedIndexes);
-        updateRowCountDisplay(limitedRows.length, matches.length, true);
+        updateRowCountDisplay(limitedRows.length, matches.length, activeFilters.length > 0 || search.length > 0);
     } else {
-        if (currentDisplayMode === 'preview') renderPreviewData(); else renderAllData();
-        updateRowCountDisplay();
+        const totalRows = baseRows.length;
+        const limit = currentDisplayMode === 'preview' && totalRows > PREVIEW_ROW_COUNT;
+        const rowsToShow = limit ? baseRows.slice(0, PREVIEW_ROW_COUNT) : baseRows;
+        const indexesToShow = limit ? baseIndexes.slice(0, PREVIEW_ROW_COUNT) : baseIndexes;
+        renderRows(rowsToShow, 0, indexesToShow);
+        updateRowCountDisplay(rowsToShow.length, totalRows, activeFilters.length > 0);
     }
     attachTableHoverListeners();
 }
@@ -338,6 +396,230 @@ function filterColumnOptions(query) {
     Array.from(selector.options).forEach(option => {
         option.hidden = search ? !option.value.toLowerCase().includes(search) : false;
     });
+}
+
+function populateFilterColumnSelector(headers) {
+    const selector = document.getElementById('filter-column');
+    if (!selector || !headers.length) return;
+    selector.innerHTML = '';
+    headers.forEach(header => {
+        const option = document.createElement('option');
+        option.value = header;
+        option.textContent = header;
+        selector.appendChild(option);
+    });
+    updateFilterOperatorOptions(headers[0]);
+}
+
+function updateFilterOperatorOptions(selectedHeader) {
+    const selector = document.getElementById('filter-operator');
+    if (!selector) return;
+    const colIndex = allHeaders.indexOf(selectedHeader);
+    const numeric = colIndex >= 0 ? isNumericColumn(colIndex) : false;
+
+    selector.innerHTML = '';
+    FILTER_OPERATORS.forEach(op => {
+        if (numeric && (op.type === 'number' || op.type === 'both')) {
+            const option = document.createElement('option');
+            option.value = op.value;
+            option.textContent = op.label;
+            option.dataset.noValue = op.noValue ? 'true' : 'false';
+            selector.appendChild(option);
+        }
+        if (!numeric && (op.type === 'text' || op.type === 'both')) {
+            const option = document.createElement('option');
+            option.value = op.value;
+            option.textContent = op.label;
+            option.dataset.noValue = op.noValue ? 'true' : 'false';
+            selector.appendChild(option);
+        }
+    });
+
+    selector.dataset.numeric = numeric ? 'true' : 'false';
+    syncFilterValueInputs();
+}
+
+function syncFilterValueInputs() {
+    const selector = document.getElementById('filter-operator');
+    const valueInput = document.getElementById('filter-value');
+    const valueWrap = document.getElementById('filter-value-wrap');
+    const maxWrap = document.getElementById('filter-value-max-wrap');
+    if (!selector) return;
+    const numeric = selector.dataset.numeric === 'true';
+    const selectedOp = selector.value;
+    const opConfig = FILTER_OPERATORS.find(op => op.value === selectedOp);
+    const noValue = opConfig?.noValue ?? false;
+    const isBetween = selectedOp === 'between';
+    if (valueInput) valueInput.placeholder = numeric ? 'Enter number' : 'Enter value';
+    if (maxWrap) maxWrap.classList.toggle('hidden', !isBetween);
+    if (valueWrap) valueWrap.classList.toggle('hidden', noValue);
+}
+
+function renderActiveFilters() {
+    const list = document.getElementById('active-filters');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!activeFilters.length) {
+        list.innerHTML = '<div class="empty-state">No filters applied.</div>';
+        return;
+    }
+    activeFilters.forEach(filter => {
+        const item = document.createElement('div');
+        item.className = 'filter-item';
+        item.dataset.filterId = filter.id;
+        const label = document.createElement('div');
+        label.className = 'filter-item-label';
+        label.textContent = `${filter.columnName} ${filter.operatorLabel}${filter.displayValue ? ` ${filter.displayValue}` : ''}`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'filter-remove';
+        button.textContent = 'Remove';
+        button.setAttribute('data-filter-remove', filter.id);
+        item.appendChild(label);
+        item.appendChild(button);
+        list.appendChild(item);
+    });
+}
+
+function updateFilterPills() {
+    const metricsPill = document.getElementById('metrics-filter-pill');
+    const filterCount = activeFilters.length;
+    if (metricsPill) {
+        metricsPill.textContent = filterCount ? `Filters: ${filterCount}` : 'No filters';
+    }
+}
+
+function rowMatchesFilter(row, filter) {
+    const raw = row[filter.columnIndex];
+    const text = String(raw ?? '').trim();
+    const lower = text.toLowerCase();
+    if (filter.operator === 'is_empty') return lower === '';
+    if (filter.operator === 'not_empty') return lower !== '';
+
+    if (filter.isNumeric) {
+        const num = Number(raw);
+        const value = Number(filter.value);
+        const valueMax = Number(filter.valueMax);
+        if (!Number.isFinite(num)) return false;
+        switch (filter.operator) {
+            case 'equals':
+                return Number.isFinite(value) ? num === value : false;
+            case 'not_equals':
+                return Number.isFinite(value) ? num !== value : false;
+            case 'gt':
+                return Number.isFinite(value) ? num > value : false;
+            case 'gte':
+                return Number.isFinite(value) ? num >= value : false;
+            case 'lt':
+                return Number.isFinite(value) ? num < value : false;
+            case 'lte':
+                return Number.isFinite(value) ? num <= value : false;
+            case 'between':
+                return Number.isFinite(value) && Number.isFinite(valueMax) ? num >= value && num <= valueMax : false;
+            default:
+                return false;
+        }
+    }
+
+    const needle = String(filter.value ?? '').toLowerCase();
+    switch (filter.operator) {
+        case 'contains':
+            return needle ? lower.includes(needle) : false;
+        case 'equals':
+            return needle ? lower === needle : false;
+        case 'not_equals':
+            return needle ? lower !== needle : false;
+        default:
+            return false;
+    }
+}
+
+function applyFilters() {
+    if (!activeFilters.length) {
+        filteredRows = null;
+        filteredRowIndexes = null;
+        updateFilterPills();
+        removeUMAPHighlight();
+        updateUMAPFilter();
+        renderActiveFilters();
+        const totalRows = allDataRows.length;
+        currentDisplayMode = totalRows > PREVIEW_ROW_COUNT ? 'preview' : 'all';
+        const toggleButton = document.getElementById('toggle-data-view');
+        if (toggleButton) {
+            toggleButton.innerHTML = currentDisplayMode === 'preview'
+                ? '<i class="fa-solid fa-expand"></i> View all rows'
+                : '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
+        }
+        renderCurrentView();
+        return;
+    }
+
+    const matches = [];
+    const matchIndexes = [];
+    allDataRows.forEach((row, idx) => {
+        const pass = activeFilters.every(filter => rowMatchesFilter(row, filter));
+        if (pass) {
+            matches.push(row);
+            matchIndexes.push(idx);
+        }
+    });
+    filteredRows = matches;
+    filteredRowIndexes = matchIndexes;
+    updateFilterPills();
+    removeUMAPHighlight();
+    updateUMAPFilter();
+    renderActiveFilters();
+    const totalRows = matches.length;
+    currentDisplayMode = totalRows > PREVIEW_ROW_COUNT ? 'preview' : 'all';
+    const toggleButton = document.getElementById('toggle-data-view');
+    if (toggleButton) {
+        toggleButton.innerHTML = currentDisplayMode === 'preview'
+            ? '<i class="fa-solid fa-expand"></i> View all rows'
+            : '<i class="fa-solid fa-compress"></i> Show Preview (20 rows)';
+    }
+    renderCurrentView();
+}
+
+function addFilter() {
+    const columnSelect = document.getElementById('filter-column');
+    const operatorSelect = document.getElementById('filter-operator');
+    const valueInput = document.getElementById('filter-value');
+    const valueMaxInput = document.getElementById('filter-value-max');
+    if (!columnSelect || !operatorSelect) return;
+    const columnName = columnSelect.value;
+    const columnIndex = allHeaders.indexOf(columnName);
+    if (columnIndex < 0) return;
+    const operator = operatorSelect.value;
+    const operatorConfig = FILTER_OPERATORS.find(op => op.value === operator);
+    const noValue = operatorConfig?.noValue ?? false;
+    const value = valueInput ? valueInput.value.trim() : '';
+    const valueMax = valueMaxInput ? valueMaxInput.value.trim() : '';
+    const isBetween = operator === 'between';
+    if (!noValue) {
+        if (!value) return;
+        if (isBetween && !valueMax) return;
+    }
+    const numeric = columnIndex >= 0 ? isNumericColumn(columnIndex) : false;
+    const displayValue = noValue ? '' : (isBetween ? `${value} to ${valueMax}` : value);
+    activeFilters.push({
+        id: `filter-${nextFilterId++}`,
+        columnIndex,
+        columnName,
+        operator,
+        operatorLabel: operatorConfig?.label ?? operator,
+        value,
+        valueMax,
+        isNumeric: numeric,
+        displayValue
+    });
+    if (valueInput) valueInput.value = '';
+    if (valueMaxInput) valueMaxInput.value = '';
+    applyFilters();
+}
+
+function removeFilter(id) {
+    activeFilters = activeFilters.filter(filter => filter.id !== id);
+    applyFilters();
 }
 
 function resetColumnSelection() {
@@ -451,6 +733,7 @@ async function loadFullDataset(token) {
         }
 
         populateColumnSelector(allHeaders);
+        populateFilterColumnSelector(allHeaders);
         renderCurrentView();
         initStatsSelector();
     } catch (error) {
@@ -520,7 +803,48 @@ document.addEventListener('DOMContentLoaded', function () {
         resetColumnsButton.addEventListener('click', resetColumnSelection);
     }
 
+    const filterColumn = document.getElementById('filter-column');
+    if (filterColumn) {
+        filterColumn.addEventListener('change', (event) => {
+            updateFilterOperatorOptions(event.target.value);
+        });
+    }
+
+    const filterOperator = document.getElementById('filter-operator');
+    if (filterOperator) {
+        filterOperator.addEventListener('change', () => {
+            syncFilterValueInputs();
+        });
+    }
+
+    const addFilterButton = document.getElementById('add-filter');
+    if (addFilterButton) {
+        addFilterButton.addEventListener('click', addFilter);
+    }
+
+    const clearFiltersButton = document.getElementById('clear-filters');
+    if (clearFiltersButton) {
+        clearFiltersButton.addEventListener('click', () => {
+            activeFilters = [];
+            filteredRows = null;
+            filteredRowIndexes = null;
+            applyFilters();
+        });
+    }
+
+    const activeFiltersList = document.getElementById('active-filters');
+    if (activeFiltersList) {
+        activeFiltersList.addEventListener('click', (event) => {
+            const target = event.target.closest('[data-filter-remove]');
+            if (!target) return;
+            const filterId = target.getAttribute('data-filter-remove');
+            if (filterId) removeFilter(filterId);
+        });
+    }
+
     initMetricTooltips();
+    renderActiveFilters();
+    updateFilterPills();
 
     document.querySelectorAll('.tab-button').forEach(btn => {
         btn.addEventListener('click', () => {
