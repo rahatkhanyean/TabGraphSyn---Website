@@ -21,9 +21,19 @@
     <div data-run-token="{{ run_token }}" style="display: none;"></div>
 
     <div class="result-layout">
-        <div class="result-main">
+        <div class="result-main view-dashboard" id="result-main-container">
 
-            <div class="stats-overview">
+            <!-- View Switcher -->
+            <div class="view-switcher">
+                <button type="button" class="view-btn active" data-view="dashboard">
+                    <i class="fa-solid fa-chart-line"></i> Dashboard
+                </button>
+                <button type="button" class="view-btn" data-view="projection">
+                    <i class="fa-solid fa-project-diagram"></i> Projection
+                </button>
+            </div>
+
+            <div class="stats-overview component-stats">
                 <div class="stat-tile">
                     <span class="stat-label">Data source</span>
                     <span class="stat-value">{{ metadata.data_source|default:"preloaded"|capfirst }}</span>
@@ -42,142 +52,136 @@
                 </div>
             </div>
 
-            <div class="dashboard-grid">
-                <div class="dashboard-column">
-                    <section class="card" highlight-card>
-                        <div class="card-header">
-                            <div>
-                                <div class="card-title"><i class="fa-solid fa-angle-left"></i> Configuration</div>
-                                <div class="card-subtitle">Run parameters and output options.</div>
-                            </div>
-                        </div>
-                        <ul class="summary-list">
-                            <li><strong>Data source:</strong> {{ metadata.data_source|default:"preloaded"|capfirst }}</li>
-                            <li><strong>Dataset:</strong> {{ metadata.dataset }}</li>
-                            <li><strong>Target table:</strong> {{ metadata.table }}</li>
-                            {% if metadata.data_source == 'uploaded' %}
-                                {% if metadata.input_filename %}<li><strong>Original file:</strong> {{ metadata.input_filename }}</li>{% endif %}
-                                {% if metadata.input_rows %}<li><strong>Input rows:</strong> {{ metadata.input_rows }}</li>{% endif %}
-                                <li><strong>Metadata mode:</strong> {% if metadata.metadata_mode == 'template' %}Template{% if metadata.metadata_template %} ({{ metadata.metadata_template }}){% endif %}{% else %}Custom{% endif %}</li>
-                            {% else %}
-                                {% if metadata.metadata_template %}<li><strong>Metadata template:</strong> {{ metadata.metadata_template }}</li>{% endif %}
-                            {% endif %}
-                            {% if metadata.generated_rows %}<li><strong>Generated rows:</strong> {{ metadata.generated_rows }}</li>{% endif %}
-                            <li><strong>Skip preprocessing:</strong> {{ metadata.skip_preprocessing|yesno:"Yes,No" }}</li>
-                            {% if metadata.epochs_gnn %}<li><strong>GNN epochs:</strong> {{ metadata.epochs_gnn }}</li>{% endif %}
-                            {% if metadata.epochs_vae %}<li><strong>VAE epochs:</strong> {{ metadata.epochs_vae }}</li>{% endif %}
-                            {% if metadata.epochs_diff %}<li><strong>Diffusion epochs:</strong> {{ metadata.epochs_diff }}</li>{% endif %}
-                        </ul>
-                        <div class="action-row">
-                            {% if has_output %}
-                                <a href="{{ download_url }}" class="primary-button">Download CSV</a>
-                            {% else %}
-                                <span class="secondary-button" is-disabled aria-disabled="true">No CSV</span>
-                            {% endif %}
-                            <a href="{% url 'synthetic:upload' %}" class="secondary-button">New Run</a>
-                        </div>
-                    </section>
+            <section class="card component-config" highlight-card>
+                <div class="card-header">
+                    <div>
+                        <div class="card-title"><i class="fa-solid fa-angle-left"></i> Configuration</div>
+                        <div class="card-subtitle">Run parameters and output options.</div>
+                    </div>
+                </div>
+                <ul class="summary-list">
+                    <li><strong>Data source:</strong> {{ metadata.data_source|default:"preloaded"|capfirst }}</li>
+                    <li><strong>Dataset:</strong> {{ metadata.dataset }}</li>
+                    <li><strong>Target table:</strong> {{ metadata.table }}</li>
+                    {% if metadata.data_source == 'uploaded' %}
+                        {% if metadata.input_filename %}<li><strong>Original file:</strong> {{ metadata.input_filename }}</li>{% endif %}
+                        {% if metadata.input_rows %}<li><strong>Input rows:</strong> {{ metadata.input_rows }}</li>{% endif %}
+                        <li><strong>Metadata mode:</strong> {% if metadata.metadata_mode == 'template' %}Template{% if metadata.metadata_template %} ({{ metadata.metadata_template }}){% endif %}{% else %}Custom{% endif %}</li>
+                    {% else %}
+                        {% if metadata.metadata_template %}<li><strong>Metadata template:</strong> {{ metadata.metadata_template }}</li>{% endif %}
+                    {% endif %}
+                    {% if metadata.generated_rows %}<li><strong>Generated rows:</strong> {{ metadata.generated_rows }}</li>{% endif %}
+                    <li><strong>Skip preprocessing:</strong> {{ metadata.skip_preprocessing|yesno:"Yes,No" }}</li>
+                    {% if metadata.epochs_gnn %}<li><strong>GNN epochs:</strong> {{ metadata.epochs_gnn }}</li>{% endif %}
+                    {% if metadata.epochs_vae %}<li><strong>VAE epochs:</strong> {{ metadata.epochs_vae }}</li>{% endif %}
+                    {% if metadata.epochs_diff %}<li><strong>Diffusion epochs:</strong> {{ metadata.epochs_diff }}</li>{% endif %}
+                </ul>
+                <div class="action-row">
+                    {% if has_output %}
+                        <a href="{{ download_url }}" class="primary-button">Download CSV</a>
+                    {% else %}
+                        <span class="secondary-button" is-disabled aria-disabled="true">No CSV</span>
+                    {% endif %}
+                    <a href="{% url 'synthetic:upload' %}" class="secondary-button">New Run</a>
+                </div>
+            </section>
 
-                    {% if evaluation and evaluation.status == 'success' and evaluation_rows %}
-                    <section class="card" evaluation-card>
-                        <div class="card-header">
-                            <div>
-                                <div class="card-title">Evaluation Metrics</div>
-                                <div class="card-subtitle">Quantitative assessment.</div>
-                            </div>
-                        </div>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        {% for header in evaluation_headers %}
-                                            <th>{{ header }}</th>
-                                        {% endfor %}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for row in evaluation_rows %}
-                                        <tr>
-                                            {% for cell in row %}
-                                                <td>{{ cell }}</td>
-                                            {% endfor %}
-                                        </tr>
+            {% if evaluation and evaluation.status == 'success' and evaluation_rows %}
+            <section class="card component-eval" evaluation-card>
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Evaluation Metrics</div>
+                        <div class="card-subtitle">Quantitative assessment.</div>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                {% for header in evaluation_headers %}
+                                    <th>{{ header }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in evaluation_rows %}
+                                <tr>
+                                    {% for cell in row %}
+                                        <td>{{ cell }}</td>
                                     {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+            </section>
+            {% endif %}
 
-                <div class="dashboard-column">
-                    {% if evaluation %}
-                    <section class="card" visualization-card>
-                        <div class="card-header">
-                            <div>
-                                <div class="card-title">Visualization (UMAP)</div>
-                                <div class="card-subtitle">2D projection of real vs synthetic data.</div>
-                            </div>
-                        </div>
-                        {% if evaluation.status == 'success' %}
-                            {% if umap_coordinates %}
-                                <!-- Interactive UMAP Plot -->
-                                <div class="umap-plot-container">
-                                    <div id="interactive-umap-plot" style="width: 100%; height: 500px;"></div>
-                                </div>
-                                <!-- Hidden JSON data for JavaScript -->
-                                <script id="umap-data" type="application/json">{{ umap_coordinates|safe }}</script>
-                            {% elif evaluation_plot_data_uri %}
-                                <!-- Fallback: Static image -->
-                                <div class="image-wrapper">
-                                    <img src="{{ evaluation_plot_data_uri }}" alt="UMAP projection">
-                                </div>
-                            {% elif evaluation_plot_path %}
-                                <p class="empty-state">UMAP plot saved at {{ evaluation_plot_path }}.</p>
-                            {% endif %}
-
-                            {% if evaluation_download_url %}
-                                <div class="action-row" style="margin-top: 16px;">
-                                    <a href="{{ evaluation_download_url }}" class="secondary-button">Download Plot</a>
-                                </div>
-                            {% endif %}
-                        {% else %}
-                            <p class="empty-state">Evaluation unavailable: {{ evaluation.error|default:"See run details for more information." }}</p>
-                        {% endif %}
-                    </section>
-                    {% endif %}
-
-                    {% if epoch_metrics %}
-                    <section class="card epoch-metrics-card">
-                        <div class="card-header">
-                            <div>
-                                <div class="card-title">Training Progress</div>
-                                <div class="card-subtitle">Epoch-wise error metrics.</div>
-                            </div>
-                        </div>
-                        <div class="epoch-metrics-info">
-                            <p style="margin: 0 0 16px; color: var(--text-muted); font-size: 14px;">
-                                Eval every <strong>{{ epoch_metrics.eval_frequency }}</strong> epochs.
-                            </p>
-                        </div>
-                        <div class="charts-grid">
-                            <div class="chart-container">
-                                <canvas id="marginalErrorChart"></canvas>
-                            </div>
-                            <div class="chart-container">
-                                <canvas id="pairwiseErrorChart"></canvas>
-                            </div>
-                        </div>
-                        <div class="action-row" style="margin-top: 20px;">
-                            <button type="button" class="secondary-button compact" onclick="downloadChart('marginalErrorChart', 'marginal_error_chart.png')">Marginal Chart</button>
-                            <button type="button" class="secondary-button compact" onclick="downloadChart('pairwiseErrorChart', 'pairwise_error_chart.png')">Pairwise Chart</button>
-                        </div>
-                    </section>
-                    {% endif %}
+            {% if evaluation %}
+            <section class="card component-umap" visualization-card>
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Visualization (UMAP)</div>
+                        <div class="card-subtitle">2D projection of real vs synthetic data.</div>
+                    </div>
                 </div>
-            </div>
+                {% if evaluation.status == 'success' %}
+                    {% if umap_coordinates %}
+                        <!-- Interactive UMAP Plot -->
+                        <div class="umap-plot-container">
+                            <div id="interactive-umap-plot" style="width: 100%; height: 500px;"></div>
+                        </div>
+                        <!-- Hidden JSON data for JavaScript -->
+                        <script id="umap-data" type="application/json">{{ umap_coordinates|safe }}</script>
+                    {% elif evaluation_plot_data_uri %}
+                        <!-- Fallback: Static image -->
+                        <div class="image-wrapper">
+                            <img src="{{ evaluation_plot_data_uri }}" alt="UMAP projection">
+                        </div>
+                    {% elif evaluation_plot_path %}
+                        <p class="empty-state">UMAP plot saved at {{ evaluation_plot_path }}.</p>
+                    {% endif %}
 
-            <section class="card data-card">
+                    {% if evaluation_download_url %}
+                        <div class="action-row" style="margin-top: 16px;">
+                            <a href="{{ evaluation_download_url }}" class="secondary-button">Download Plot</a>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <p class="empty-state">Evaluation unavailable: {{ evaluation.error|default:"See run details for more information." }}</p>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            {% if epoch_metrics %}
+            <section class="card component-epoch epoch-metrics-card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Training Progress</div>
+                        <div class="card-subtitle">Epoch-wise error metrics.</div>
+                    </div>
+                </div>
+                <div class="epoch-metrics-info">
+                    <p style="margin: 0 0 16px; color: var(--text-muted); font-size: 14px;">
+                        Eval every <strong>{{ epoch_metrics.eval_frequency }}</strong> epochs.
+                    </p>
+                </div>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <canvas id="marginalErrorChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="pairwiseErrorChart"></canvas>
+                    </div>
+                </div>
+                <div class="action-row" style="margin-top: 20px;">
+                    <button type="button" class="secondary-button compact" onclick="downloadChart('marginalErrorChart', 'marginal_error_chart.png')">Marginal Chart</button>
+                    <button type="button" class="secondary-button compact" onclick="downloadChart('pairwiseErrorChart', 'pairwise_error_chart.png')">Pairwise Chart</button>
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="card component-table data-card">
                 <div class="card-header">
                     <div>
                         <div class="card-title">Preview (first 20 rows)</div>

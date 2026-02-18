@@ -2,11 +2,12 @@
 
 let umapData = null;
 let currentHoveredRow = null;
+let selectedRowIndex = null;
 let allDataRows = [];
 let currentDisplayMode = 'preview'; // 'preview' or 'all'
 
 // Initialize interactive UMAP plot with Plotly
-function initializeInteractiveUMAP(umapCoordinates, labels) {
+function initializeInteractiveUMAP(umapCoordinates) {
     if (!umapCoordinates || umapCoordinates.length === 0) {
         console.warn('No UMAP coordinates available for interactive plot');
         return;
@@ -161,23 +162,45 @@ function removeUMAPHighlight() {
     }
 }
 
-// Attach hover event listeners to table rows
+// Attach hover and click event listeners to table rows
 function attachTableHoverListeners() {
     const tableBody = document.querySelector('.data-preview-table tbody');
     if (!tableBody) return;
 
     const rows = tableBody.querySelectorAll('tr');
     rows.forEach((row, index) => {
+        // Hover Enter
         row.addEventListener('mouseenter', function() {
             currentHoveredRow = index;
             this.classList.add('row-highlighted');
             highlightUMAPPoint(index);
         });
 
+        // Hover Leave
         row.addEventListener('mouseleave', function() {
             currentHoveredRow = null;
             this.classList.remove('row-highlighted');
-            removeUMAPHighlight();
+
+            // If there's a selected row, restore its highlight
+            if (selectedRowIndex !== null) {
+                // If hovering over selected row, leaving it restores it (redundant but safe)
+                // If hovering over other row, leaving it restores selected row
+                highlightUMAPPoint(selectedRowIndex);
+            } else {
+                removeUMAPHighlight();
+            }
+        });
+
+        // Click (Selection)
+        row.addEventListener('click', function() {
+            // Deselect previous visual style
+            const allRows = tableBody.querySelectorAll('tr');
+            allRows.forEach(r => r.classList.remove('row-selected'));
+
+            // Select new
+            selectedRowIndex = index;
+            this.classList.add('row-selected');
+            highlightUMAPPoint(index);
         });
     });
 }
@@ -202,7 +225,11 @@ function toggleDataView() {
         toggleButton.innerHTML = '<i class="fa-solid fa-expand"></i> View All Data';
     }
 
-    // Re-attach hover listeners after re-rendering
+    // Reset selection state when view changes
+    selectedRowIndex = null;
+    removeUMAPHighlight();
+
+    // Re-attach listeners after re-rendering
     attachTableHoverListeners();
 }
 
@@ -283,6 +310,39 @@ async function loadFullDataset(token) {
     }
 }
 
+// View Switcher Logic
+function setupViewSwitcher() {
+    const switcherBtns = document.querySelectorAll('.view-btn');
+    const mainContainer = document.getElementById('result-main-container');
+    const plotDiv = document.getElementById('interactive-umap-plot');
+
+    switcherBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const view = this.getAttribute('data-view');
+
+            // Update buttons state
+            switcherBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update container class
+            if (view === 'dashboard') {
+                mainContainer.classList.remove('view-projection');
+                mainContainer.classList.add('view-dashboard');
+            } else {
+                mainContainer.classList.remove('view-dashboard');
+                mainContainer.classList.add('view-projection');
+            }
+
+            // Resize Plotly if it exists
+            if (plotDiv) {
+                setTimeout(() => {
+                    Plotly.Plots.resize(plotDiv);
+                }, 100);
+            }
+        });
+    });
+}
+
 // Initialize everything when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     // Check if we're on the result page
@@ -317,4 +377,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (toggleButton) {
         toggleButton.addEventListener('click', toggleDataView);
     }
+
+    // Setup View Switcher
+    setupViewSwitcher();
 });
